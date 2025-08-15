@@ -52,7 +52,6 @@ def test_comprehensive():
         print(f'   ✗ Agent 导入失败: {e}')
 
     print('\n=== 测试完成 ===')
-    return True
 
 if __name__ == "__main__":
     test_comprehensive()

@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Any
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
