@@ -1,84 +1,87 @@
-import os
-from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-
-# 1. 加载环境变量 (这通常放在文件顶部，因为它们在任何函数或主逻辑运行前都需要)
-load_dotenv()
-
-# 2. 获取 Google API Key
-google_api_key = os.environ.get("GOOGLE_API_KEY")
-
-# 检查 API Key 是否成功加载，提供更友好的提示
-if not google_api_key:
-    # 这里的错误检查可以合并，避免重复的 ValueError
-    raise ValueError(
-        "GOOGLE_API_KEY not found in environment variables. "
-        "Please ensure it's set in a .env file (e.g., GOOGLE_API_KEY=\"YOUR_KEY\") or as an environment variable."
-    )
-else:
-    # DEBUG: 仅在调试时打印密钥前缀，完成后请移除或注释此行
-    print(f"DEBUG: GOOGLE_API_KEY loaded (truncated): {google_api_key[:5]}...")
+import argparse
+import requests
+import json
+from typing import Optional
 
 
-# ====================================================================
-# 将所有主要执行逻辑放入 if __name__ == "__main__": 块中
-# ====================================================================
-if __name__ == "__main__":
-    print("\n--- LangChain + Google Gemini 示例开始运行 ---")
-
+def call_agent_api(query: str, api_url: str = "http://localhost:8000") -> str:
+    """通过 HTTP API 调用 Agent。"""
     try:
-        # 3. 初始化 ChatGoogleGenerativeAI 模型
-        # model="gemini-pro" 是 Google Gemini 的文本模型
-        # temperature 控制模型的创造性（0.0 最保守，1.0 最创造）
-        # 如果您遇到 404 错误，可以尝试 model="gemini-2.0-flash" 或其他可用模型
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash", # 或者 "gemini-2.0-flash"
-            google_api_key=google_api_key,
-            temperature=0.7
+        response = requests.post(
+            f"{api_url}/agent/invoke",
+            json={"input": query},
+            headers={"Content-Type": "application/json"},
+            timeout=30
         )
-
-        # 4. 定义对话消息并调用 LLM (历史问题示例)
-        print("\n--- 历史问题示例 ---")
-        history_messages = [
-            SystemMessage(content="你是一个乐于助人的AI助手，专门解答关于历史的问题。"),
-            HumanMessage(content="谁是秦始皇？他做了什么？"),
-        ]
-        try:
-            response_history = llm.invoke(history_messages)
-            print("\n--- Gemini (历史助手) 的回答 ---")
-            print(response_history.content)
-        except Exception as e:
-            print(f"调用历史模型时发生错误: {e}")
-            print("请检查您的API密钥是否有效，以及所选模型是否在您的区域可用。")
+        response.raise_for_status()
+        result = response.json()
+        return result.get("answer", "未收到回答")
+    except requests.exceptions.ConnectionError:
+        return "连接失败：请确保 API 服务已启动（运行 python scripts/run_api.py）"
+    except requests.exceptions.Timeout:
+        return "请求超时：API 服务响应时间过长"
+    except requests.exceptions.RequestException as e:
+        return f"API 调用错误：{e}"
+    except json.JSONDecodeError:
+        return "API 返回格式错误：无法解析 JSON 响应"
 
 
-        # 5. 另一个链式调用示例 (诗意向导)
-        print("\n--- 诗意向导示例 ---")
-        prompt_template = ChatPromptTemplate.from_messages([
-            ("system", "你是一个富有诗意的旅行向导。"),
-            ("user", "{question}"),
-        ])
+def run_demo() -> None:
+    """通过 API 调用演示两个示例问题。"""
+    print("\n--- API 演示模式 ---")
+    print("注意：需要先启动 API 服务（python scripts/run_api.py）\n")
+    
+    # 示例1：历史问题
+    print("--- 历史问题示例 ---")
+    history_question = "谁是秦始皇？他做了什么？"
+    print(f"问题: {history_question}")
+    history_answer = call_agent_api(history_question)
+    print(f"\n--- Agent 的回答 ---")
+    print(history_answer)
+    
+    print("\n" + "="*50 + "\n")
+    
+    # 示例2：诗意描述
+    print("--- 诗意向导示例 ---")
+    travel_question = "给我描述一下北京故宫，用诗意的语言。"
+    print(f"问题: {travel_question}")
+    travel_answer = call_agent_api(travel_question)
+    print(f"\n--- Agent 的回答 ---")
+    print(travel_answer)
 
-        chain = prompt_template | llm | StrOutputParser()
 
-        travel_question = "给我描述一下北京故宫，用诗意的语言。"
-        print(f"\n问题: {travel_question}")
-        try:
-            response_chain = chain.invoke({"question": travel_question})
-            print("\n--- Gemini (诗意向导) 的回答 ---")
-            print(response_chain)
-        except Exception as e:
-            print(f"调用诗意向导时发生错误: {e}")
-            print("请检查您的API密钥是否有效，以及所选模型是否在您的区域可用。")
+def run_agent_cli(query: Optional[str]) -> None:
+    """通过 API 运行 Agent 客户端。"""
+    if query:
+        # 单轮模式
+        answer = call_agent_api(query)
+        print(answer)
+        return
 
-    except ValueError as ve:
-        # 捕获 API Key 未找到的错误
-        print(f"配置错误: {ve}")
-    except Exception as general_e:
-        # 捕获其他未预料的通用错误
-        print(f"程序运行过程中发生未知错误: {general_e}")
+    # 交互模式
+    print("进入交互模式，输入内容后回车；Ctrl+C 退出。")
+    print("注意：需要先启动 API 服务（python scripts/run_api.py）\n")
+    
+    try:
+        while True:
+            user = input("你: ")
+            if not user.strip():
+                continue
+            answer = call_agent_api(user)
+            print(f"助理: {answer}\n")
+    except KeyboardInterrupt:
+        print("\n已退出。")
 
-    print("\n--- 项目运行完毕！---")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="LangChain Agent / Demo 启动入口")
+    parser.add_argument("--demo", action="store_true", help="运行原始 LLM 演示")
+    parser.add_argument("-q", "--query", default=None, help="单轮问答（Agent 模式）")
+    args = parser.parse_args()
+
+    if args.demo:
+        print("\n--- 运行 Demo ---")
+        run_demo()
+    else:
+        print("\n--- 运行 Agent ---")
+        run_agent_cli(args.query)
