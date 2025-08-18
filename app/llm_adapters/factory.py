@@ -28,6 +28,12 @@ class LLMProviderFactory:
         except Exception:
             # 允许没有 google 依赖的环境，仅在真正请求该 provider 时报错
             pass
+        try:
+            from .gpti4 import Gpti4Provider  # noqa: F401
+            cls.register("gpti4", Gpti4Provider)
+        except Exception:
+            # 允许没有 openai 依赖的环境，仅在真正请求该 provider 时报错
+            pass
         cls._bootstrapped = True
 
     @classmethod
