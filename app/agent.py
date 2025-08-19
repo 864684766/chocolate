@@ -27,6 +27,9 @@ def build_agent() -> AgentExecutor:
 你是一个智能助理，能够使用工具来帮助回答问题。你有以下工具可用：
 
 {tools}
+可以使用的工具名称有：{tool_names} # <--- **新添加的行**
+
+这是你和用户之前的对话历史：{chat_history} 
 
 使用以下格式：
 
@@ -66,15 +69,3 @@ Thought: {agent_scratchpad}
     )
     
     return agent_executor
-
-
-def run_interactive(messages: list[str]) -> str:
-    """交互式运行（保持向后兼容）"""
-    agent = build_agent()
-    last = ""
-    for m in messages:
-        result = agent.invoke({"input": m})
-        last = result.get("output", "")
-    return last
-
-

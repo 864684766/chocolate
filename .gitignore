@@ -1,1 +1,5 @@
 /app/__pycache__
+/app/api/__pycache__
+/app/core/__pycache__
+/app/llm_adapters/__pycache__
+/app/tools/__pycache__
