@@ -1,55 +1,102 @@
-from typing import Any, Dict, Type, Optional
+from typing import Any, Dict, Type, Optional, Tuple
+from collections import OrderedDict
 
 from ..config import get_settings, Settings
 
 
 class LLMProviderFactory:
-    """LLM 提供商工厂，基于注册表映射选择 Provider。"""
+    """LLM 提供商工厂，基于注册表映射选择 Provider，支持模型实例缓存。"""
 
     _registry: Dict[str, Type] = {}
+    _model_cache: OrderedDict = OrderedDict()  # LRU缓存实现
+    _max_cache_size: int = 10  # 最大缓存数量
     _bootstrapped: bool = False
 
     @classmethod
     def register(cls, name: str, provider_cls: Type) -> None:
+        """注册提供商类"""
         cls._registry[name.lower()] = provider_cls
 
     @classmethod
     def unregister(cls, name: str) -> None:
+        """注销提供商类"""
         cls._registry.pop(name.lower(), None)
 
     @classmethod
     def _bootstrap_defaults(cls) -> None:
+        """懒加载注册默认提供商"""
         if cls._bootstrapped:
             return
-        # 懒加载注册，避免导入时触发第三方依赖
+        
+        # 注册 Google 提供商
         try:
-            from .google import GoogleProvider  # noqa: F401
+            from .google import GoogleProvider
             cls.register("google", GoogleProvider)
         except Exception:
-            # 允许没有 google 依赖的环境，仅在真正请求该 provider 时报错
             pass
+        
+        # 注册 OpenAI 提供商
         try:
-            from .gpti4 import Gpti4Provider  # noqa: F401
+            from .gpti4 import Gpti4Provider
             cls.register("openai", Gpti4Provider)
         except Exception:
-            # 允许没有 openai 依赖的环境，仅在真正请求该 provider 时报错
             pass
+        
         cls._bootstrapped = True
 
     @classmethod
-    def get_chat_model(cls,ai_type:Optional[str]=None,provider:Optional[str]=None) -> Any:
-        settings: Settings = get_settings(ai_type,provider)
+    def get_chat_model(cls, ai_type: Optional[str] = None, provider: Optional[str] = None) -> Any:
+        """获取聊天模型实例，支持缓存"""
+        settings: Settings = get_settings(ai_type, provider)
 
         if settings.api_key is None:
             raise ValueError('api_key必须配置')
-        provider = (settings.provider or "google").lower()
+        
+        provider_name = (settings.provider or "google").lower()
+        
+        # 创建缓存键
+        cache_key = (ai_type or "default", provider_name)
+        
+        # 检查缓存（LRU实现）
+        if cache_key in cls._model_cache:
+            # 移动到末尾（最近使用）
+            cls._model_cache.move_to_end(cache_key)
+            return cls._model_cache[cache_key]
 
         # 确保默认 Provider 已尝试注册
         cls._bootstrap_defaults()
 
-        provider_cls = cls._registry.get(provider)
+        provider_cls = cls._registry.get(provider_name)
         if not provider_cls:
             raise NotImplementedError(
-                f"Provider '{provider}' 尚未注册，请添加实现或安装相应依赖。"
+                f"Provider '{provider_name}' 尚未注册，请添加实现或安装相应依赖。"
             )
-        return provider_cls(settings).build_chat_model()
+        
+        # 创建模型实例并缓存
+        model_instance = provider_cls(settings).build_chat_model()
+        
+        # LRU缓存管理
+        cls._model_cache[cache_key] = model_instance
+        cls._model_cache.move_to_end(cache_key)  # 移动到末尾
+        
+        # 如果缓存超过最大大小，删除最旧的
+        if len(cls._model_cache) > cls._max_cache_size:
+            cls._model_cache.popitem(last=False)  # 删除最旧的
+        
+        return model_instance
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """清除模型缓存"""
+        cls._model_cache.clear()
+
+    @classmethod
+    def get_cached_models(cls) -> Dict[Tuple[str, str], Any]:
+        """获取当前缓存的所有模型实例"""
+        return cls._model_cache.copy()
+
+    @classmethod
+    def get_registered_providers(cls) -> list:
+        """获取已注册的提供商列表"""
+        cls._bootstrap_defaults()
+        return list(cls._registry.keys())

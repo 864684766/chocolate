@@ -128,12 +128,18 @@ chocolate/
 
 在项目根目录创建 `.env`（按需修改）：
 
-```
-PROVIDER=google
-GOOGLE_API_KEY=你的GoogleAPIKey
+```bash
+# 默认配置
+DEFAULT_PROVIDER=google
+DEFAULT_API_KEY=你的GoogleAPIKey
 MODEL=gemini-2.5-flash
 TEMPERATURE=0.7
 REQUEST_TIMEOUT=30
+
+# AI类型特定配置（可选）
+GPT4_API_KEY=你的GPT4密钥
+GEMINI_API_KEY=你的Gemini密钥
+CLAUDE_API_KEY=你的Claude密钥
 ```
 
 ## 安装与运行
@@ -159,13 +165,19 @@ python -m scripts.run_agent
 ## Web API 说明（含示例）
 
 - 健康检查：GET /health
-  - 响应：`{"status":"ok"}`
+  - 响应：包含系统状态、可用AI类型、缓存信息等
+- 缓存信息：GET /cache-info
+  - 响应：显示当前缓存的模型和Agent链信息
+- 清除缓存：POST /clear-cache
+  - 响应：清除所有缓存并返回状态
 
 - 调用 Agent：POST /agent/invoke
   - 请求体（JSON）：
     ```json
     {
       "input": "你好，请用一句话解释量子计算",
+      "ai_type": "gpt4",  // 可选：指定AI类型（gpt4, gpt35, gemini, claude）
+      "provider": "google",  // 可选：直接指定提供商
       "session_id": "可选字符串，用于区分会话（开启会话记忆）"
     }
     ```
@@ -319,7 +331,24 @@ if __name__ == "__main__":
 ## 🔄 本次升级新增内容（v2.0 版本）
 
 ### 升级概览
-本项目在原有基础上进行了重大升级，将轻量级的策略链提升为功能完整的 ReAct Agent 执行器，并引入会话记忆功能。
+本项目在原有基础上进行了重大升级，将轻量级的策略链提升为功能完整的 ReAct Agent 执行器，并引入会话记忆功能。同时进行了性能优化和架构改进。
+
+### 🚀 性能优化亮点
+
+#### 1. 智能缓存系统
+- **模型实例缓存**：基于 `(ai_type, provider)` 的LRU缓存，避免重复创建
+- **Agent链缓存**：智能缓存Agent链实例，提升响应速度
+- **自动内存管理**：LRU淘汰策略，防止内存泄漏
+
+#### 2. 配置管理优化
+- **AI类型映射**：支持 `ai_type` 参数自动映射到对应的提供商和模型
+- **动态配置**：支持运行时添加新的AI类型映射
+- **多配置实例**：解决了全局缓存导致的配置冲突问题
+
+#### 3. 监控和管理接口
+- **健康检查**：`/health` 接口显示系统状态和缓存信息
+- **缓存管理**：`/cache-info` 和 `/clear-cache` 接口
+- **实时监控**：缓存使用率、可用AI类型等统计信息
 
 ### 核心变化对比
 | 特性 | 原版本 | 新版本 |
@@ -640,6 +669,12 @@ curl -X POST http://localhost:8000/math/sum -H "Content-Type: application/json" 
 - 配置集中管理
   - 位置：app/config.py
   - 作用：从 .env 读取配置并校验关键参数（如 GOOGLE_API_KEY）。
+- 智能缓存系统
+  - 位置：app/llm_adapters/factory.py, app/core/agent_service.py
+  - 作用：LRU缓存模型实例和Agent链，提升性能并防止内存泄漏。
+- 服务层抽象
+  - 位置：app/core/agent_service.py
+  - 作用：统一管理Agent链的创建和缓存，提供监控接口。
 
 ## 如何新增一个业务 API 模块（Koa2 风格）
 
@@ -700,7 +735,9 @@ pip install langchain-openai
   - 如果是工具导致的错误（比如 http_get 抓取失败），请检查输入参数
 
 - 如何切换模型提供商？
-  - 修改 .env 中的 PROVIDER（如 openai、google），并保证已安装对应依赖
+  - 方法1：修改 .env 中的 DEFAULT_PROVIDER（如 openai、google）
+  - 方法2：在API调用时指定 `ai_type` 或 `provider` 参数
+  - 方法3：使用不同的环境变量配置不同的AI类型密钥
 
 - 如何启用流式输出？
   - 目前接口是一次性返回。可以在 FastAPI 中新增 SSE/WebSocket 路由，并在 Agent 端改用流式生成。
