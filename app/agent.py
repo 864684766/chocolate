@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any
+from typing import Any, Optional
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import Runnable
@@ -8,7 +8,7 @@ from .llm import get_chat_model
 from .tools import search_docs, http_get, calc
 
 
-def build_agent() -> AgentExecutor:
+def build_agent(ai_type:Optional[str]=None,provider:Optional[str]=None) -> AgentExecutor:
     """构建一个完整的 ReAct Agent 执行器，支持多步思考-行动-观察循环。
     
     Agent 会自主决定何时使用哪个工具，可以进行多轮推理：
@@ -17,7 +17,7 @@ def build_agent() -> AgentExecutor:
     - 观察：分析工具结果
     - 重复：继续思考或给出最终答案
     """
-    llm = get_chat_model()
+    llm = get_chat_model(ai_type,provider)
     
     # 可用工具列表
     tools = [search_docs, http_get, calc]

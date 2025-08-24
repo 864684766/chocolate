@@ -1,14 +1,14 @@
-from typing import Any
+from typing import Any, Optional
 
 from .llm_adapters.factory import LLMProviderFactory
 
 
-def get_chat_model() -> Any:
+def get_chat_model(ai_type:Optional[str]=None,provider:Optional[str]=None) -> Any:
     """根据配置返回对应提供商的聊天模型实例。
     通过 providers 工厂集中管理，便于扩展 OpenAI/Azure/Anthropic 等。
     """
     try:
-        return LLMProviderFactory.get_chat_model()
+        return LLMProviderFactory.get_chat_model(ai_type,provider)
     except NotImplementedError as e:
         # 提供更友好的错误提示
         raise RuntimeError(

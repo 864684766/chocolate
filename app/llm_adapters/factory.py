@@ -1,4 +1,4 @@
-from typing import Any, Dict, Type
+from typing import Any, Dict, Type, Optional
 
 from ..config import get_settings, Settings
 
@@ -30,15 +30,18 @@ class LLMProviderFactory:
             pass
         try:
             from .gpti4 import Gpti4Provider  # noqa: F401
-            cls.register("gpti4", Gpti4Provider)
+            cls.register("openai", Gpti4Provider)
         except Exception:
             # 允许没有 openai 依赖的环境，仅在真正请求该 provider 时报错
             pass
         cls._bootstrapped = True
 
     @classmethod
-    def get_chat_model(cls) -> Any:
-        settings: Settings = get_settings()
+    def get_chat_model(cls,ai_type:Optional[str]=None,provider:Optional[str]=None) -> Any:
+        settings: Settings = get_settings(ai_type,provider)
+
+        if settings.api_key is None:
+            raise ValueError('api_key必须配置')
         provider = (settings.provider or "google").lower()
 
         # 确保默认 Provider 已尝试注册

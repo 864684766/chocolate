@@ -12,7 +12,7 @@ from ..llm import get_chat_model
 _global_agent_chain_instance: Optional[RunnableWithMessageHistory] = None
 _global_runnable_config_template: Optional[RunnableConfig] = None
 
-def initialize_agent_chain() -> RunnableWithMessageHistory:
+def initialize_agent_chain(ai_type:Optional[str]=None,provider:Optional[str]=None) -> RunnableWithMessageHistory:
     """
     初始化并返回带有会话历史的完整 Agent 链。
     此函数设计为在应用启动时只调用一次，以避免重复初始化开销。
@@ -23,7 +23,7 @@ def initialize_agent_chain() -> RunnableWithMessageHistory:
     if _global_agent_chain_instance is None:
         print("Initializing Agent Chain...")
         # 1. 构建核心 AgentExecutor
-        _base_agent_executor = build_agent()
+        _base_agent_executor = build_agent(ai_type,provider)
 
         # 2. 定义最终输出格式化的 LLM 提示词
         _final_output_formatter_prompt = PromptTemplate.from_template("""
@@ -43,7 +43,7 @@ def initialize_agent_chain() -> RunnableWithMessageHistory:
 """)
 
         # 3. 获取用于最终格式化的 LLM 实例
-        _formatting_llm = get_chat_model()
+        _formatting_llm = get_chat_model(ai_type,provider)
 
         # 4. 构建包含 Agent 执行和最终格式化步骤的完整 Runnable 链
         _full_chain_with_formatting = (

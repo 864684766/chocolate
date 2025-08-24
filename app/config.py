@@ -11,49 +11,38 @@ class Settings:
     model: str = "gemini-2.5-flash"
     temperature: float = 0.7
     request_timeout: int = 30
-    # 针对特定提供商的密钥（如 Google）
-    google_api_key: Optional[str] = None
-    # 通用密钥占位（非 google 提供商时可使用）
+    # 大模型的key
     api_key: Optional[str] = None
 
 
 _cached_settings: Optional[Settings] = None
 
 
-def get_settings() -> Settings:
+def get_settings(ai_type:Optional[str]=None,provider:Optional[str]=None) -> Settings:
     """加载并缓存应用配置。支持按 provider 选择性校验密钥。"""
     global _cached_settings
     if _cached_settings is not None:
         return _cached_settings
 
-    load_dotenv()
+    load_dotenv(dotenv_path='.env.local')
 
-    provider = os.environ.get("PROVIDER", "google").strip().lower()
+    cur_provider = os.environ.get("DEFAULT_PROVIDER").strip().lower() if provider.lower() is None else provider.lower()
 
     # 模型与参数
-    model = os.environ.get("MODEL", "gemini-2.5-flash")
+
     temperature = float(os.environ.get("TEMPERATURE", "0.7"))
     request_timeout = int(os.environ.get("REQUEST_TIMEOUT", "30"))
-
-    google_api_key: Optional[str] = None
-    api_key: Optional[str] = os.environ.get("API_KEY")
-
-    if provider == "google":
-        google_api_key = os.environ.get("GOOGLE_API_KEY")
-        # 将强制校验延迟到真正构建 Google Provider 时再进行，避免非 google provider 的测试因缺少该变量而失败
-        if not google_api_key:
-            # 仅发出提示，由具体 provider 构建时抛出更明确的异常
-            google_api_key = None
-        # 兼容：将通用 api_key 也设置为 google 密钥，便于上层按通用字段读取
-        if not api_key and google_api_key:
-            api_key = google_api_key
+    api_key = os.environ.get("DEFAULT_API_KEY")
+    model = ai_type.lower().replace('_','-')
+    if ai_type is not None:
+        print(f"{ai_type.upper()}_API_KEY")
+        api_key = os.environ.get(f"{ai_type.upper()}_API_KEY")
 
     _cached_settings = Settings(
-        provider=provider,
+        provider=cur_provider,
         model=model,
         temperature=temperature,
         request_timeout=request_timeout,
-        google_api_key=google_api_key,
         api_key=api_key,
     )
     return _cached_settings

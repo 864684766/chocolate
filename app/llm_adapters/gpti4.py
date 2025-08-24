@@ -1,5 +1,7 @@
 from typing import Any
 
+from pydantic import SecretStr
+
 try:
     from langchain_openai import ChatOpenAI
 except Exception as e:  # 延迟到构建时抛出更友好的错误
@@ -31,6 +33,6 @@ class Gpti4Provider:
             )
         return ChatOpenAI(
             model=self.settings.model,
-            api_key=self.settings.api_key,
+            api_key=SecretStr(self.settings.api_key),
             temperature=self.settings.temperature,
         )

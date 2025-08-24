@@ -25,6 +25,6 @@ class GoogleProvider:
             ) from _import_error
         return ChatGoogleGenerativeAI(
             model=self.settings.model,
-            google_api_key=self.settings.google_api_key,
+            google_api_key=self.settings.api_key,
             temperature=self.settings.temperature,
         )
