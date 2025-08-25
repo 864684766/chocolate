@@ -11,8 +11,8 @@ except Exception as e:  # 延迟到构建时抛出更友好的错误
 from ..config import Settings
 
 
-class Gpti4Provider:
-    """OpenAI GPT-4 家族提供商适配器（注册名：gpti4）。
+class OpenAIProvider:
+    """OpenAI 提供商适配器（注册名：openai）。
 
     通过 Settings 构建 LangChain 的 ChatOpenAI 实例。
     - 依赖包：langchain-openai（按需安装）
@@ -29,7 +29,7 @@ class Gpti4Provider:
             ) from _import_error
         if not self.settings.api_key:
             raise RuntimeError(
-                "缺少 API_KEY，请在环境或 .env 中设置 API_KEY=你的OpenAIKey（当 PROVIDER=gpti4 时必需）"
+                "缺少 API_KEY，请在环境或 .env 中设置 API_KEY=你的OpenAIKey（当 PROVIDER=openai 时必需）"
             )
         return ChatOpenAI(
             model=self.settings.model,

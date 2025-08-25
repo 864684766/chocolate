@@ -1,15 +1,14 @@
 from typing import Any, Dict, Type, Optional, Tuple
-from collections import OrderedDict
-
-from ..config import get_settings, Settings
+from ..config import get_settings, Settings, get_config_manager
+from ..core.dict_helper import touch_cache_key, pop_lru_item
 
 
 class LLMProviderFactory:
     """LLM 提供商工厂，基于注册表映射选择 Provider，支持模型实例缓存。"""
 
     _registry: Dict[str, Type] = {}
-    _model_cache: OrderedDict = OrderedDict()  # LRU缓存实现
-    _max_cache_size: int = 10  # 最大缓存数量
+    _model_cache: dict = dict()  # LRU缓存实现
+    _max_cache_size: int = None  # 最大缓存数量，从配置文件读取
     _bootstrapped: bool = False
 
     @classmethod
@@ -37,8 +36,8 @@ class LLMProviderFactory:
         
         # 注册 OpenAI 提供商
         try:
-            from .gpti4 import Gpti4Provider
-            cls.register("openai", Gpti4Provider)
+            from .openai import OpenaiProvider
+            cls.register("openai", OpenaiProvider)
         except Exception:
             pass
         
@@ -60,7 +59,7 @@ class LLMProviderFactory:
         # 检查缓存（LRU实现）
         if cache_key in cls._model_cache:
             # 移动到末尾（最近使用）
-            cls._model_cache.move_to_end(cache_key)
+            touch_cache_key(cls._model_cache,cache_key)
             return cls._model_cache[cache_key]
 
         # 确保默认 Provider 已尝试注册
@@ -77,11 +76,16 @@ class LLMProviderFactory:
         
         # LRU缓存管理
         cls._model_cache[cache_key] = model_instance
-        cls._model_cache.move_to_end(cache_key)  # 移动到末尾
+        touch_cache_key(cls._model_cache, cache_key)  # 移动到末尾
+        
+        # 获取缓存配置
+        if cls._max_cache_size is None:
+            cache_config = get_config_manager().get_cache_config()
+            cls._max_cache_size = cache_config.get("max_cache_size", 10)
         
         # 如果缓存超过最大大小，删除最旧的
         if len(cls._model_cache) > cls._max_cache_size:
-            cls._model_cache.popitem(last=False)  # 删除最旧的
+            pop_lru_item(cls._model_cache)# 删除最旧的
         
         return model_instance
 

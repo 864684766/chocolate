@@ -1,0 +1,87 @@
+{
+  "app": {
+    "name": "chocolate",
+    "version": "1.0.0",
+    "description": "智能AI助手系统"
+  },
+
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8000,
+    "reload": true,
+    "description": "API服务器配置"
+  },
+
+  "llm": {
+    "default_provider": "google",
+    "default_model": "gemini-2.5-flash",
+    "default_temperature": 0.7,
+    "request_timeout": 30,
+    "description": "大语言模型基础配置"
+  },
+
+  "cache": {
+    "max_cache_size": 10,
+    "description": "模型实例缓存配置"
+  },
+
+  "agent": {
+    "verbose": false,
+    "max_iterations": 5,
+    "max_execution_time": 30,
+    "handle_parsing_errors": true,
+    "return_intermediate_steps": false,
+    "description": "Agent执行器配置"
+  },
+
+  "ai_types": {
+    "gpt4": {
+      "provider": "openai",
+      "model": "gpt-4",
+      "api_key_env": "GPT4_API_KEY",
+      "description": "OpenAI GPT-4 模型",
+      "max_tokens": 4096,
+      "temperature": 0.7
+    },
+    "gpt35": {
+      "provider": "openai",
+      "model": "gpt-3.5-turbo",
+      "api_key_env": "GPT35_API_KEY",
+      "description": "OpenAI GPT-3.5 Turbo 模型",
+      "max_tokens": 4096,
+      "temperature": 0.7
+    },
+    "gemini": {
+      "provider": "google",
+      "model": "gemini-2.5-flash",
+      "api_key_env": "GEMINI_API_KEY",
+      "description": "Google Gemini 2.5 Flash 模型",
+      "max_tokens": 8192,
+      "temperature": 0.7
+    },
+    "claude": {
+      "provider": "anthropic",
+      "model": "claude-3-sonnet-20240229",
+      "api_key_env": "CLAUDE_API_KEY",
+      "description": "Anthropic Claude 3 Sonnet 模型",
+      "max_tokens": 4096,
+      "temperature": 0.7
+    }
+  },
+
+  "environment": {
+    "env_file": ".env.local",
+    "default_api_key_env": "DEFAULT_API_KEY",
+    "description": "环境变量配置"
+  },
+
+  "tools": {
+    "available_tools": ["search_docs", "http_get", "calc"],
+    "description": "可用工具列表"
+  },
+
+  "prompts": {
+    "react_template": "你是一个智能助理，能够使用工具来帮助回答问题。你有以下工具可用：\n\n{tools}\n可以使用的工具名称有：{tool_names}\n\n这是你和用户之前的对话历史：{chat_history}\n\n使用以下格式：\n\nQuestion: 用户的问题\nThought: 我需要思考如何回答这个问题\nAction: 要使用的工具名称\nAction Input: 工具的输入参数\nObservation: 工具返回的结果\n... (这个 Thought/Action/Action Input/Observation 可以重复多次)\nThought: 现在我知道最终答案了\nFinal Answer: 给用户的最终回答\n\n重要提示：\n1. 用中文思考和回答\n2. 如果需要计算，使用 calc 工具\n3. 如果需要搜索信息，使用 search_docs 工具\n4. 如果需要获取网页内容，使用 http_get 工具\n5. 可以组合使用多个工具来解决复杂问题\n6. 最终答案要简洁明了\n\nQuestion: {input}\nThought: {agent_scratchpad}",
+    "description": "Agent提示词模板"
+  }
+}

@@ -1,9 +1,9 @@
 from typing import Optional, Dict, Tuple
-from collections import OrderedDict
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 
+from .dict_helper import touch_cache_key, pop_lru_item
 from ..agent import build_agent
 from langchain_core.runnables import RunnableWithMessageHistory, RunnableConfig, RunnableParallel
 
@@ -15,7 +15,7 @@ class AgentService:
     """Agent服务类，管理Agent链的创建和缓存"""
     
     def __init__(self):
-        self._agent_chain_cache: OrderedDict = OrderedDict()  # LRU缓存实现
+        self._agent_chain_cache:dict = dict()  # LRU缓存实现
         self._max_cache_size: int = 5  # 最大缓存数量（Agent链比模型更重）
         self._runnable_config_template: Optional[RunnableConfig] = None
     
@@ -25,7 +25,7 @@ class AgentService:
         
         if cache_key in self._agent_chain_cache:
             # 移动到末尾（最近使用）
-            self._agent_chain_cache.move_to_end(cache_key)
+            touch_cache_key(self._agent_chain_cache,cache_key)
             return self._agent_chain_cache[cache_key]
         
         # 创建新的Agent链
@@ -33,15 +33,15 @@ class AgentService:
         
         # LRU缓存管理
         self._agent_chain_cache[cache_key] = agent_chain
-        self._agent_chain_cache.move_to_end(cache_key)  # 移动到末尾
+        touch_cache_key(self._agent_chain_cache, cache_key) # 移动到末尾
         
         # 如果缓存超过最大大小，删除最旧的
         if len(self._agent_chain_cache) > self._max_cache_size:
-            self._agent_chain_cache.popitem(last=False)  # 删除最旧的
-        
+            pop_lru_item(self._agent_chain_cache)  # 移动到末尾
         return agent_chain
     
-    def _create_agent_chain(self, ai_type: Optional[str] = None, provider: Optional[str] = None) -> RunnableWithMessageHistory:
+    @staticmethod
+    def _create_agent_chain(ai_type: Optional[str] = None, provider: Optional[str] = None) -> RunnableWithMessageHistory:
         """创建Agent链实例"""
         print(f"Creating Agent Chain for ai_type={ai_type}, provider={provider}...")
         
