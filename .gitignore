@@ -5,3 +5,4 @@
 /app/tools/__pycache__
 /.env
 /.env.local
+/.idea
