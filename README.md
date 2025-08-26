@@ -61,14 +61,13 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-5. 配置环境变量（创建 .env 文件）：
+5. 配置应用（编辑 config/app_config.json）：
 
 ```
-PROVIDER=google
-GOOGLE_API_KEY=你的GoogleAPIKey
-MODEL=gemini-2.5-flash
-TEMPERATURE=0.7
-REQUEST_TIMEOUT=30
+# 关键位置：
+# providers.google.api_key          # Google API Key
+# providers.google.models.*         # 各模型的温度/别名/安全阈值/generation_config
+# llm.default_provider, default_model, default_temperature, request_timeout
 ```
 
 6. 启动 API 服务（默认 http://localhost:8000）：
@@ -112,7 +111,7 @@ python main.py --demo
 chocolate/
   ├─ app/
   │  ├─ __init__.py
-  │  ├─ config.py          # 配置与 .env 加载
+  │  ├─ config.py          # 配置中心（读取 config/app_config.json）
   │  ├─ llm.py             # LLM 统一入口（委托给工厂获取聊天模型）
   │  ├─ llm_adapters/      # LLM 适配器层（原 providers）
   │  │  ├─ __init__.py
@@ -601,9 +600,9 @@ langchain-community>=0.0.20  # 社区工具和组件
 #### 2️⃣ 配置系统理解
 
 - **配置加载**：<mcfile name="config.py" path="d:\test\chocolate\app\config.py"></mcfile>
-  - 作用：从 .env 文件读取环境变量
-  - 查看重点：`PROVIDER`、`GOOGLE_API_KEY` 等配置项
-  - **关键提示**：所有环境变量都在这里集中管理
+  - 作用：从 `config/app_config.json` 读取配置
+  - 查看重点：`providers`/`llm`/`prompts` 等配置项
+  - **关键提示**：不再使用环境变量，密钥与模型均在 JSON 中集中管理
 
 ### 第二层：核心功能深入
 
@@ -890,12 +889,20 @@ from .openai import OpenAIProvider  # 新增导入
 # "openai": OpenAIProvider.build_chat_model,
 ```
 
-3. 在 .env 中设置：
+3. 在 `config/app_config.json` 中设置：
 
 ```
-PROVIDER=openai
-OPENAI_API_KEY=你的OpenAIKey
-MODEL=gpt-4o-mini
+{
+  "providers": {
+    "openai": {
+      "api_key": "你的OpenAIKey",
+      "models": {
+        "gpt-4o-mini": { "description": "示例", "max_tokens": 8192, "temperature": 0.7, "aliases": ["gpt4o"] }
+      }
+    }
+  },
+  "llm": { "default_provider": "openai", "default_model": "gpt-4o-mini" }
+}
 ```
 
 4. 安装依赖：
@@ -910,8 +917,7 @@ pip install langchain-openai
 
 - 启动报错缺少密钥？
 
-  - 检查 .env 中是否配置了 GOOGLE_API_KEY（或对应 Provider 的密钥）
-  - Windows 下 .env 路径注意要在项目根目录
+  - 检查 `config/app_config.json` 的 `providers.<name>.api_key` 是否已填写
 
 - API 调不通/连接失败？
 
@@ -925,19 +931,60 @@ pip install langchain-openai
 
 - 如何切换模型提供商？
 
-  - 方法 1：修改 .env 中的 DEFAULT_PROVIDER（如 openai、google）
+  - 方法 1：修改 `llm.default_provider`（如 openai、google）
   - 方法 2：在 API 调用时指定 `ai_type` 或 `provider` 参数
-  - 方法 3：使用不同的环境变量配置不同的 AI 类型密钥
+  - 方法 3：在 `providers` 中为不同模型配置不同 `api_key`
 
 - 如何启用流式输出？
 
   - 目前接口是一次性返回。可以在 FastAPI 中新增 SSE/WebSocket 路由，并在 Agent 端改用流式生成。
 
 - 安全提示
-  - 请勿把 API Key 写死在代码中，统一使用 .env 管理
+  - 请勿把 API Key 写死在代码中，统一通过 `config/app_config.json`（或企业密钥管理服务）管理
   - 如果要对外提供服务，请加入鉴权（Token/签名）与基本限流
   - 注意 CORS 设置，避免被任意前端调用
 
 ---
 
 文档已合并（原 docs/DEVELOPMENT.md、docs/PATTERNS.md 内容已纳入本 README）。
+
+### 模型提供商与 LangChain 库对照表（学习向）
+
+- 说明：不同提供商在 LangChain 里通常对应不同的 Python 包/类；若平台提供“OpenAI 兼容”端点，则可直接用 `langchain_openai.ChatOpenAI` 并设置 `base_url`。
+
+- 常见对照：
+
+  - Google Gemini → `langchain_google_genai.ChatGoogleGenerativeAI`（需配置 `safety_settings`、`max_output_tokens` 等专有项）
+  - OpenAI 官方 → `langchain_openai.ChatOpenAI`
+  - DeepSeek/Moonshot/SiliconFlow/Together/OpenRouter/Groq（OpenAI 兼容）→ `langchain_openai.ChatOpenAI` + `base_url`
+  - Anthropic Claude → `langchain_anthropic.ChatAnthropic`
+  - 智谱 GLM → `langchain_community.chat_models.ChatZhipuAI`
+  - 通义千问 Qwen → `langchain_community.chat_models.ChatTongyi`
+
+- 查询入口：
+  - LangChain 官方 Integrations（按 Provider 搜索）：`https://python.langchain.com/docs/integrations/`。
+  - 具体到聊天模型（Chat Models）：`https://python.langchain.com/docs/integrations/chat/`。
+  - OpenAI 兼容如何使用：参考 `langchain_openai` 文档并查看各平台“OpenAI-Compatible API”说明。
+
+### LangSmith 配置与使用（本项目已内置）
+
+- 我们在 `app/core/agent_service.py` 中读取 `config/app_config.json` 的 `observability.langsmith` 段并注入进程环境变量：
+
+  - `enabled`: 是否开启追踪；
+  - `api_key`: 你的 LangSmith API Key；
+  - `project`: 项目名；
+  - `endpoint`: LangSmith 服务地址（默认 `https://api.smith.langchain.com`）。
+
+- 生效方式：当 `enabled=true` 时，代码会设置以下变量（无需你在系统层面额外配置）：
+
+  - `LANGCHAIN_TRACING_V2=true`
+  - `LANGCHAIN_API_KEY` 与 `LANGSMITH_API_KEY`
+  - `LANGCHAIN_PROJECT` 与 `LANGSMITH_PROJECT`
+  - `LANGCHAIN_ENDPOINT` 与 `LANGSMITH_ENDPOINT`
+
+- 访问方式：调用任意接口后，前往 LangSmith 控制台（`https://smith.langchain.com`），在对应 Project 下查看 Run/Trace，即可看到链路、提示词、耗时、错误等信息。
+
+- 常见问题：
+  - 必须写 `LANGCHAIN_API_KEY` 吗？不必须。本项目会把 `app_config.json` 中的 `observability.langsmith.api_key` 注入到进程环境变量，等效于你手工设置。
+  - 看不到 token 级别输出？很多 Provider（尤其是非流式或空返回）不会有 token 级别的分块；请展开最底层模型节点并查看 Metadata/Run 面板。
+  - 错误排查建议：若模型节点没有任何候选/元数据，多为权限/配额/区域问题；若有 `safety_ratings` 或 `block_reason`，则是安全策略拦截。

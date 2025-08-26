@@ -8,6 +8,7 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 #
 from ..agent import build_agent
 from ..core.agent_service import initialize_agent_chain, get_runnable_config
+from ..config import get_config_manager
 
 #
 router = APIRouter()
@@ -51,4 +52,15 @@ def agent_invoke(req: InvokeRequest):
         answer = result.get("output", result) if isinstance(result, dict) else str(result)
         return InvokeResponse(answer=answer)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # 丰富错误返回，便于定位 Gemini Pro 空返回成因
+        cfg = get_config_manager()
+        settings = cfg.get_settings(req.ai_type, req.provider)
+        model_cfg = cfg.get_model_config(settings.provider, settings.model)
+        detail = {
+            "error": str(e),
+            "provider": settings.provider,
+            "model": settings.model,
+            "generation_config": model_cfg.get("generation_config"),
+            "safety": model_cfg.get("safety"),
+        }
+        raise HTTPException(status_code=500, detail=detail)

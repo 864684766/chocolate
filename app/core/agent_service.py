@@ -5,6 +5,7 @@ from ..agent import build_agent
 from langchain_core.runnables import RunnableWithMessageHistory, RunnableConfig
 
 from ..core.session_manager import get_session_history
+from ..config import get_config_manager
 
 
 class AgentService:
@@ -41,6 +42,25 @@ class AgentService:
         """创建Agent链实例"""
         print(f"Creating Agent Chain for ai_type={ai_type}, provider={provider}...")
         
+        # 0. 按配置启用 LangSmith 追踪（无需改业务代码）
+        cfg = get_config_manager().get_config()
+        smith = (cfg.get("observability", {}) or {}).get("langsmith", {})
+        if smith.get("enabled"):
+            import os
+            os.environ["LANGCHAIN_TRACING_V2"] = "true"
+            # 兼容老/新两套环境变量命名（LangSmith 控制台可能展示 LANGSMITH_*，
+            # LangChain SDK 推荐使用 LANGCHAIN_*）。这里同时设置，避免版本差异带来的困扰。
+            os.environ["LANGSMITH_TRACING"] = "true"
+            if smith.get("api_key"):
+                os.environ["LANGCHAIN_API_KEY"] = str(smith.get("api_key"))
+                os.environ["LANGSMITH_API_KEY"] = str(smith.get("api_key"))
+            if smith.get("project"):
+                os.environ["LANGCHAIN_PROJECT"] = str(smith.get("project"))
+                os.environ["LANGSMITH_PROJECT"] = str(smith.get("project"))
+            if smith.get("endpoint"):
+                os.environ["LANGCHAIN_ENDPOINT"] = str(smith.get("endpoint"))
+                os.environ["LANGSMITH_ENDPOINT"] = str(smith.get("endpoint"))
+
         # 1. 构建核心 AgentExecutor
         base_agent_executor = build_agent(ai_type, provider)
 

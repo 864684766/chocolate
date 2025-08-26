@@ -105,8 +105,8 @@
           }
         },
 
-        "gemini-1.5-pro-002": {
-          "description": "Google Gemini 1.5-pro-002 模型",
+        "gemini-2.5-pro-preview-06-05": {
+          "description": "Google Gemini 2.5-pro-preview-06-05 模型",
           "max_tokens": 8192,
           "temperature": 0.7,
           "generation_config": {
@@ -158,5 +158,13 @@
   "prompts": {
     "react_template": "你是一个智能助理，能够使用工具来帮助回答问题。你有以下工具可用：\n\n{tools}\n可以使用的工具名称有：{tool_names}\n\n这是你和用户之前的对话历史：{chat_history}\n\n使用以下格式：\n\nQuestion: 用户的问题\nThought: 我需要思考如何回答这个问题\nAction: 要使用的工具名称\nAction Input: 工具的输入参数\nObservation: 工具返回的结果\n... (这个 Thought/Action/Action Input/Observation 可以重复多次)\nThought: 现在我知道最终答案了\nFinal Answer: 给用户的最终回答\n\n重要提示：\n1. 用中文思考和回答\n2. 如果需要计算，使用 calc 工具\n3. 如果需要搜索信息，使用 search_docs 工具\n4. 如果需要获取网页内容，使用 http_get 工具\n5. 可以组合使用多个工具来解决复杂问题\n6. 最终答案要简洁明了，用自然语言回答\n\nQuestion: {input}\nThought: {agent_scratchpad}",
     "description": "提示词模板配置"
+  },
+  "observability": {
+    "langsmith": {
+      "enabled": true,
+      "api_key": "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",
+      "project": "chocolate-dev",
+      "endpoint": "https://api.smith.langchain.com"
+    }
   }
 }
