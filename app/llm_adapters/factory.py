@@ -1,4 +1,5 @@
 from typing import Any, Dict, Type, Optional, Tuple
+import logging
 from ..config import get_settings, Settings, get_config_manager
 from ..core.dict_helper import touch_cache_key, pop_lru_item
 
@@ -27,19 +28,21 @@ class LLMProviderFactory:
         if cls._bootstrapped:
             return
         
-        # 注册 Google 提供商
+        # 注册 Google 提供商（仅在依赖可用时）
         try:
             from .google import GoogleProvider
+        except ImportError as e:
+            logging.getLogger(__name__).info("Google provider 未启用（缺少依赖）：%s", e)
+        else:
             cls.register("google", GoogleProvider)
-        except Exception:
-            pass
         
-        # 注册 OpenAI 提供商
+        # 注册 OpenAI 提供商（仅在依赖可用时）
         try:
-            from .openai import OpenaiProvider
-            cls.register("openai", OpenaiProvider)
-        except Exception:
-            pass
+            from .openai import OpenAIProvider
+        except ImportError as e:
+            logging.getLogger(__name__).info("OpenAI provider 未启用（缺少依赖）：%s", e)
+        else:
+            cls.register("openai", OpenAIProvider)
         
         cls._bootstrapped = True
 

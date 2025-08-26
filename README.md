@@ -177,47 +177,50 @@ chocolate/
 - `handle_parsing_errors`: 是否处理解析错误
 - `return_intermediate_steps`: 是否返回中间步骤
 
-#### 6. AI 类型映射 (`ai_types`)
+#### 6. 提供商配置 (`providers`)
 
-包含各种 AI 模型的配置信息：
+以提供商为 key，包含各提供商的 API 密钥和模型配置：
 
-- `provider`: 提供商
-- `model`: 模型名称
-- `api_key_env`: API 密钥环境变量名
-- `description`: 模型描述
-- `max_tokens`: 最大 token 数
-- `temperature`: 温度参数
+- `api_key`: 提供商的 API 密钥
+- `description`: 提供商描述
+- `models`: 该提供商支持的模型列表，每个模型包含：
+  - `description`: 模型描述
+  - `max_tokens`: 最大 token 数
+  - `temperature`: 温度参数
 
-#### 7. 环境配置 (`environment`)
+#### 7. 模型别名 (`aliases`)
 
-- `env_file`: 环境变量文件路径
-- `default_api_key_env`: 默认 API 密钥环境变量名
+每个模型可以配置多个别名，用于快捷访问：
 
-#### 8. 工具配置 (`tools`)
+- `aliases`: 字符串数组，包含该模型的别名列表
+- 例如：`"aliases": ["gpt4"]` 表示可以通过 `ai_type="gpt4"` 来使用该模型
+
+#### 8. 环境配置 (`environment`)
+
+- `description`: 环境配置描述
+
+#### 9. 工具配置 (`tools`)
 
 - `available_tools`: 可用工具列表
 
-#### 9. 提示词配置 (`prompts`)
+#### 10. 提示词配置 (`prompts`)
 
 - `react_template`: ReAct Agent 的提示词模板
+- `final_output_formatter`: 最终输出格式化提示词模板
 
-### 环境变量配置
+### 配置说明
 
-在项目根目录创建 `.env`（按需修改）：
+配置文件采用 JSON 格式，所有配置项都集中在 `config/app_config.json` 中管理。主要特点：
 
-```bash
-# 默认配置
-DEFAULT_PROVIDER=google
-DEFAULT_API_KEY=你的GoogleAPIKey
-MODEL=gemini-2.5-flash
-TEMPERATURE=0.7
-REQUEST_TIMEOUT=30
+1. **以提供商为中心**: 配置按提供商组织，每个提供商包含其 API 密钥和支持的模型列表
+2. **模型配置独立**: 每个模型都有独立的配置参数（max_tokens、temperature 等）
+3. **模型别名**: 每个模型可以配置多个别名，提供快捷访问方式
+4. **提示词配置化**: 所有提示词模板都配置化，便于调整和优化
 
-# AI类型特定配置（可选）
-GPT4_API_KEY=你的GPT4密钥
-GEMINI_API_KEY=你的Gemini密钥
-CLAUDE_API_KEY=你的Claude密钥
-```
+**重要**:
+
+- 使用前请将配置文件中的 API 密钥占位符替换为实际的 API 密钥
+- 配置文件不存在时会抛出错误，确保配置文件存在且格式正确
 
 ### 配置使用方法
 
@@ -236,6 +239,32 @@ cache_config = config_manager.get_cache_config()
 all_config = get_config()
 llm_config = get_config("llm")
 ```
+
+### 配置系统重构说明
+
+本项目已完成配置系统的重大重构，主要变更包括：
+
+#### 1. 配置文件结构重新设计
+
+- **以提供商为中心**: 配置按提供商组织，每个提供商包含其 API 密钥和支持的模型列表
+- **支持多种模型**: 每个提供商可配置多个模型（如 gemini-2.5-flash、gemini-2.5-pro 等）
+- **模型别名**: 每个模型可以配置多个别名，提供快捷访问方式
+
+#### 2. 环境变量完全移除
+
+- 删除 python-dotenv 依赖
+- 移除所有环境变量相关代码
+- 所有配置统一在 JSON 文件中管理
+
+#### 3. 提示词配置化
+
+- 将 ReAct 模板配置化，便于调整和优化
+- 简化提示词结构，移除冗余的格式化步骤
+
+#### 4. 错误处理优化
+
+- 配置文件不存在时直接抛出错误，避免默认配置的冗余
+- 提供清晰的错误信息，便于问题定位
 
 ### 接入 Nacos 的准备
 

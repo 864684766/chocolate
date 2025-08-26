@@ -28,51 +28,126 @@
   "agent": {
     "verbose": false,
     "max_iterations": 5,
-    "max_execution_time": 30,
+    "max_execution_time": 300,
     "handle_parsing_errors": true,
     "return_intermediate_steps": false,
     "description": "Agent执行器配置"
   },
 
-  "ai_types": {
-    "gpt4": {
-      "provider": "openai",
-      "model": "gpt-4",
-      "api_key_env": "GPT4_API_KEY",
-      "description": "OpenAI GPT-4 模型",
-      "max_tokens": 4096,
-      "temperature": 0.7
+  "providers": {
+    "openai": {
+      "api_key": "your_openai_api_key_here",
+      "description": "OpenAI 提供商",
+      "models": {
+        "gpt-4": {
+          "description": "OpenAI GPT-4 模型",
+          "max_tokens": 4096,
+          "temperature": 0.7,
+          "aliases": ["gpt4"]
+        },
+        "gpt-4-turbo": {
+          "description": "OpenAI GPT-4 Turbo 模型",
+          "max_tokens": 4096,
+          "temperature": 0.7
+        },
+        "gpt-3.5-turbo": {
+          "description": "OpenAI GPT-3.5 Turbo 模型",
+          "max_tokens": 4096,
+          "temperature": 0.7,
+          "aliases": ["gpt35"]
+        }
+      }
     },
-    "gpt35": {
-      "provider": "openai",
-      "model": "gpt-3.5-turbo",
-      "api_key_env": "GPT35_API_KEY",
-      "description": "OpenAI GPT-3.5 Turbo 模型",
-      "max_tokens": 4096,
-      "temperature": 0.7
+    "google": {
+      "api_key": "AIzaSyBpGJx5F4MUccXrr5BC8TJvdLr36qw8A-M",
+      "description": "Google 提供商",
+      "models": {
+        "gemini-2.5-flash": {
+          "description": "Google Gemini 2.5 Flash 模型",
+          "max_tokens": 8192,
+          "temperature": 0.7,
+          "aliases": ["gemini"]
+        },
+        "gemini-2.5-pro": {
+          "description": "Google Gemini 2.5 Pro 模型",
+          "max_tokens": 8192,
+          "temperature": 0.7,
+          "generation_config": {
+            "response_mime_type": "text/plain",
+            "max_output_tokens": 2048
+          },
+          "safety": {
+            "hate_speech": "BLOCK_NONE",
+            "harassment": "BLOCK_NONE",
+            "sex": "BLOCK_NONE",
+            "danger": "BLOCK_NONE"
+          }
+        },
+
+        "gemini-1.5-flash": {
+          "description": "Google Gemini 1.5 Flash 模型",
+          "max_tokens": 8192,
+          "temperature": 0.7
+        },
+        "gemini-1.5-pro": {
+          "description": "Google Gemini 1.5 Pro 模型",
+          "max_tokens": 8192,
+          "temperature": 0.7,
+          "generation_config": {
+            "response_mime_type": "text/plain",
+            "max_output_tokens": 2048
+          },
+          "safety": {
+            "hate_speech": "BLOCK_NONE",
+            "harassment": "BLOCK_NONE",
+            "sex": "BLOCK_NONE",
+            "danger": "BLOCK_NONE"
+          }
+        },
+
+        "gemini-1.5-pro-002": {
+          "description": "Google Gemini 1.5-pro-002 模型",
+          "max_tokens": 8192,
+          "temperature": 0.7,
+          "generation_config": {
+            "response_mime_type": "text/plain",
+            "max_output_tokens": 2048
+          },
+          "safety": {
+            "hate_speech": "BLOCK_NONE",
+            "harassment": "BLOCK_NONE",
+            "sex": "BLOCK_NONE",
+            "danger": "BLOCK_NONE"
+          }
+        }
+      }
     },
-    "gemini": {
-      "provider": "google",
-      "model": "gemini-2.5-flash",
-      "api_key_env": "GEMINI_API_KEY",
-      "description": "Google Gemini 2.5 Flash 模型",
-      "max_tokens": 8192,
-      "temperature": 0.7
-    },
-    "claude": {
-      "provider": "anthropic",
-      "model": "claude-3-sonnet-20240229",
-      "api_key_env": "CLAUDE_API_KEY",
-      "description": "Anthropic Claude 3 Sonnet 模型",
-      "max_tokens": 4096,
-      "temperature": 0.7
+    "anthropic": {
+      "api_key": "your_anthropic_api_key_here",
+      "description": "Anthropic 提供商",
+      "models": {
+        "claude-3-sonnet-20240229": {
+          "description": "Anthropic Claude 3 Sonnet 模型",
+          "max_tokens": 4096,
+          "temperature": 0.7,
+          "aliases": ["claude"]
+        },
+        "claude-3-haiku-20240307": {
+          "description": "Anthropic Claude 3 Haiku 模型",
+          "max_tokens": 4096,
+          "temperature": 0.7
+        },
+        "claude-3-opus-20240229": {
+          "description": "Anthropic Claude 3 Opus 模型",
+          "max_tokens": 4096,
+          "temperature": 0.7
+        }
+      }
     }
   },
 
   "environment": {
-    "env_file": ".env.local",
-    "default_api_key_env": "DEFAULT_API_KEY",
-    "description": "环境变量配置"
+    "description": "环境配置"
   },
 
   "tools": {
@@ -81,7 +156,7 @@
   },
 
   "prompts": {
-    "react_template": "你是一个智能助理，能够使用工具来帮助回答问题。你有以下工具可用：\n\n{tools}\n可以使用的工具名称有：{tool_names}\n\n这是你和用户之前的对话历史：{chat_history}\n\n使用以下格式：\n\nQuestion: 用户的问题\nThought: 我需要思考如何回答这个问题\nAction: 要使用的工具名称\nAction Input: 工具的输入参数\nObservation: 工具返回的结果\n... (这个 Thought/Action/Action Input/Observation 可以重复多次)\nThought: 现在我知道最终答案了\nFinal Answer: 给用户的最终回答\n\n重要提示：\n1. 用中文思考和回答\n2. 如果需要计算，使用 calc 工具\n3. 如果需要搜索信息，使用 search_docs 工具\n4. 如果需要获取网页内容，使用 http_get 工具\n5. 可以组合使用多个工具来解决复杂问题\n6. 最终答案要简洁明了\n\nQuestion: {input}\nThought: {agent_scratchpad}",
-    "description": "Agent提示词模板"
+    "react_template": "你是一个智能助理，能够使用工具来帮助回答问题。你有以下工具可用：\n\n{tools}\n可以使用的工具名称有：{tool_names}\n\n这是你和用户之前的对话历史：{chat_history}\n\n使用以下格式：\n\nQuestion: 用户的问题\nThought: 我需要思考如何回答这个问题\nAction: 要使用的工具名称\nAction Input: 工具的输入参数\nObservation: 工具返回的结果\n... (这个 Thought/Action/Action Input/Observation 可以重复多次)\nThought: 现在我知道最终答案了\nFinal Answer: 给用户的最终回答\n\n重要提示：\n1. 用中文思考和回答\n2. 如果需要计算，使用 calc 工具\n3. 如果需要搜索信息，使用 search_docs 工具\n4. 如果需要获取网页内容，使用 http_get 工具\n5. 可以组合使用多个工具来解决复杂问题\n6. 最终答案要简洁明了，用自然语言回答\n\nQuestion: {input}\nThought: {agent_scratchpad}",
+    "description": "提示词模板配置"
   }
 }

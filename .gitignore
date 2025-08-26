@@ -3,6 +3,5 @@
 /app/core/__pycache__
 /app/llm_adapters/__pycache__
 /app/tools/__pycache__
-/.env
-/.env.local
+# Environment variables (已移除，使用配置文件管理)
 /.idea

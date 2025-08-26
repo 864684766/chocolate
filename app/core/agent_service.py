@@ -1,14 +1,10 @@
 from typing import Optional, Dict, Tuple
 
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import PromptTemplate
-
 from .dict_helper import touch_cache_key, pop_lru_item
 from ..agent import build_agent
-from langchain_core.runnables import RunnableWithMessageHistory, RunnableConfig, RunnableParallel
+from langchain_core.runnables import RunnableWithMessageHistory, RunnableConfig
 
 from ..core.session_manager import get_session_history
-from ..llm import get_chat_model
 
 
 class AgentService:
@@ -48,43 +44,9 @@ class AgentService:
         # 1. 构建核心 AgentExecutor
         base_agent_executor = build_agent(ai_type, provider)
 
-        # 2. 定义最终输出格式化的 LLM 提示词
-        final_output_formatter_prompt = PromptTemplate.from_template("""
-你是一个友好的智能助手。请将以下信息转化为对用户的友好、简洁的最终答案。
-确保你的回答自然、流畅，像是真人对话。
-
-用户最初的问题：{input}
-原始答案（可能来自工具或代理的直接输出，可能不完整或格式化）：{raw_agent_output}
-如果你有任何相关历史，它会在这里：
-{chat_history}
-
-请用自然语言，结合用户问题和原始答案，组织一个完整的回复。
-例如，如果原始答案是一个数字（如"2.0"），你可以回答"计算结果是 2。"或者"1 加 1 等于 2。"
-如果原始答案是搜索结果，请总结后友好地回答。
-
-最终回复：
-""")
-
-        # 3. 获取用于最终格式化的 LLM 实例
-        formatting_llm = get_chat_model(ai_type, provider)
-
-        # 4. 构建包含 Agent 执行和最终格式化步骤的完整 Runnable 链
-        full_chain_with_formatting = (
-            RunnableParallel(
-                # 从 RunnableWithMessageHistory 传入的变量
-                input=lambda x: x["input"],
-                chat_history=lambda x: x["chat_history"],
-                # 运行 AgentExecutor，其输出将作为 raw_agent_output 传入格式化提示词
-                raw_agent_output=base_agent_executor,
-            )
-            | final_output_formatter_prompt # 将字典传入提示词
-            | formatting_llm # 将填充好的提示词传入 LLM
-            | StrOutputParser() # 将 LLM 的输出解析为纯字符串
-        )
-
-        # 5. 使用 RunnableWithMessageHistory 包装这个完整的链
+        # 2. 直接使用 AgentExecutor，不再需要额外的格式化步骤
         agent_chain = RunnableWithMessageHistory(
-            full_chain_with_formatting,
+            base_agent_executor,
             get_session_history,
             input_messages_key="input",
             history_messages_key="chat_history",
