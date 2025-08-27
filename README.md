@@ -962,7 +962,7 @@ pip install langchain-openai
   - 通义千问 Qwen → `langchain_community.chat_models.ChatTongyi`
 
 - 查询入口：
-  - LangChain 官方 Integrations（按 Provider 搜索）：`https://python.langchain.com/docs/integrations/`。
+  - LangChain 官方 Integrations（按 Provider 搜索）：`https://python.langchain.com/docs/integrations/providers/`。
   - 具体到聊天模型（Chat Models）：`https://python.langchain.com/docs/integrations/chat/`。
   - OpenAI 兼容如何使用：参考 `langchain_openai` 文档并查看各平台“OpenAI-Compatible API”说明。
 
