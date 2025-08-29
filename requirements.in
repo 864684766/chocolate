@@ -106,7 +106,6 @@ greenlet==3.2.4
     #   sqlalchemy
 grpcio==1.74.0
     # via
-    #   -r requirements.in
     #   google-api-core
     #   grpcio-status
     #   pymilvus
@@ -217,9 +216,7 @@ packaging==25.0
     #   langsmith
     #   marshmallow
 pandas==2.3.2
-    # via
-    #   -r requirements.in
-    #   pymilvus
+    # via pymilvus
 propcache==0.3.2
     # via
     #   -r requirements.in
@@ -232,7 +229,6 @@ proto-plus==1.26.1
     #   google-api-core
 protobuf==6.32.0
     # via
-    #   -r requirements.in
     #   google-ai-generativelanguage
     #   google-api-core
     #   googleapis-common-protos
@@ -274,7 +270,6 @@ python-dateutil==2.9.0.post0
     #   pandas
 python-dotenv==1.1.1
     # via
-    #   -r requirements.in
     #   pydantic-settings
     #   pymilvus
 pytz==2025.2
@@ -368,9 +363,7 @@ tzdata==2025.2
     #   -r requirements.in
     #   pandas
 ujson==5.11.0
-    # via
-    #   -r requirements.in
-    #   pymilvus
+    # via pymilvus
 urllib3==2.5.0
     # via
     #   -r requirements.in
