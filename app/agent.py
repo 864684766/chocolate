@@ -1,8 +1,7 @@
 from __future__ import annotations
-from typing import Any, Optional
+from typing import Optional
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import Runnable
 
 from .llm import get_chat_model
 from .tools import search_docs, http_get, calc

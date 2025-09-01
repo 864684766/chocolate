@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "chocolate"
+version = "0.1.0"
+description = ""
+authors = ["llc <86468766@qq.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.13,<4.0"
+uvicorn = "^0.35.0"
+langchain = "^0.3.27"
+langchain-core = "^0.3.75"
+requests = "^2.32.5"
+langchain-google-genai = "^2.1.10"
+langchain-openai = "^0.3.32"
+pydantic = "^2.11.7"
+fastapi = "^0.116.1"
+starlette = "^0.47.3"
+langchain-community = "^0.3.29"
+poetry-core = "^2.1.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
