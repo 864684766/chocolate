@@ -5,3 +5,4 @@
 /app/tools/__pycache__
 # Environment variables (已移除，使用配置文件管理)
 /.idea
+/tests/__pycache__

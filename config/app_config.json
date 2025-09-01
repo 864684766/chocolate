@@ -35,7 +35,17 @@
   },
 
   "chroma": {
-    "url": "http://124.71.135.104:8000/"
+    "url": "http://124.71.135.104:8000/",
+    "storage": {
+      "type": "remote",
+      "path": "/data/chromadb",
+      "persistent": true
+    },
+    "connection": {
+      "timeout": 30,
+      "retry_attempts": 3,
+      "pool_size": 10
+    }
   },
 
   "providers": {
