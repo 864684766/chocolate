@@ -34,6 +34,10 @@
     "description": "Agent执行器配置"
   },
 
+  "chroma": {
+    "url": "http://124.71.135.104:8000/"
+  },
+
   "providers": {
     "openai": {
       "api_key": "your_openai_api_key_here",
@@ -105,8 +109,8 @@
           }
         },
 
-        "gemini-2.5-pro-preview-06-05": {
-          "description": "Google Gemini 2.5-pro-preview-06-05 模型",
+        "gemini-2.5-flash-image-preview": {
+          "description": "Google Gemini 2.5-flash-image-preview 模型",
           "max_tokens": 8192,
           "temperature": 0.7,
           "generation_config": {

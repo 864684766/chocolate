@@ -16,42 +16,41 @@ class Settings:
 
 class ConfigManager:
     """配置管理器，支持从JSON文件读取配置，为后续接入nacos做准备"""
-    
+
     def __init__(self, config_file: str = "config/app_config.json"):
         self.config_file = config_file
         self._config_data = self._load_config()
-    
+
     def _load_config(self) -> Dict[str, Any]:
         """从JSON文件加载配置"""
-        config_path = Path(self.config_file)
+        current_script_dir = Path(__file__).parent.parent
+
+        # 将当前脚本目录与配置文件名拼接，形成配置文件的绝对路径
+        # 这样无论你从哪个目录启动程序，它总能找到相对于 config.py 的 config/app_config.json
+        config_path = current_script_dir / self.config_file
+
         if not config_path.exists():
             raise FileNotFoundError(f"配置文件不存在: {self.config_file}")
-        
+
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
             raise RuntimeError(f"无法加载配置文件 {self.config_file}: {e}")
-    
 
-    
-
-    
     def get_config(self, section: str = None) -> Dict[str, Any]:
         """获取配置数据"""
         if section:
             return self._config_data.get(section, {})
         return self._config_data
-    
 
-    
     def get_settings(self, ai_type: Optional[str] = None, provider: Optional[str] = None) -> Settings:
         """获取配置，支持AI类型和提供商参数"""
-        
+
         # 确定提供商和模型
         cur_provider = None
         model = None
-        
+
         if provider:
             cur_provider = provider.lower()
             model = ai_type.lower().replace('_', '-') if ai_type else self._config_data["llm"]["default_model"]
@@ -67,22 +66,22 @@ class ConfigManager:
         else:
             cur_provider = self._config_data["llm"]["default_provider"]
             model = self._config_data["llm"]["default_model"]
-        
+
         # 获取API密钥和模型配置 - 从providers配置中读取
         api_key = None
         temperature = self._config_data["llm"]["default_temperature"]
-        
+
         if cur_provider in self._config_data.get("providers", {}):
             provider_config = self._config_data["providers"][cur_provider]
             api_key = provider_config.get("api_key")
-            
+
             # 如果指定了具体模型，获取该模型的配置
             if model in provider_config.get("models", {}):
                 model_config = provider_config["models"][model]
                 temperature = model_config.get("temperature", temperature)
-        
+
         request_timeout = self._config_data["llm"]["request_timeout"]
-        
+
         return Settings(
             provider=cur_provider,
             model=model,
@@ -90,42 +89,40 @@ class ConfigManager:
             request_timeout=request_timeout,
             api_key=api_key,
         )
-    
+
     def get_agent_config(self) -> Dict[str, Any]:
         """获取Agent配置"""
         return self._config_data.get("agent", {})
-    
+
     def get_cache_config(self) -> Dict[str, Any]:
         """获取缓存配置"""
         return self._config_data.get("cache", {})
-    
+
     def get_server_config(self) -> Dict[str, Any]:
         """获取服务器配置"""
         return self._config_data.get("server", {})
-    
+
     def get_prompts_config(self) -> Dict[str, Any]:
         """获取提示词配置"""
         return self._config_data.get("prompts", {})
-    
+
     def get_tools_config(self) -> Dict[str, Any]:
         """获取工具配置"""
         return self._config_data.get("tools", {})
-    
+
     def get_providers_config(self) -> Dict[str, Any]:
         """获取提供商配置"""
         return self._config_data.get("providers", {})
-    
+
     def get_provider_config(self, provider: str) -> Dict[str, Any]:
         """获取指定提供商的配置"""
         return self._config_data.get("providers", {}).get(provider, {})
-    
+
     def get_model_config(self, provider: str, model: str) -> Dict[str, Any]:
         """获取指定提供商和模型的配置"""
         provider_config = self.get_provider_config(provider)
         return provider_config.get("models", {}).get(model, {})
-    
 
-    
     def _find_model_by_alias(self, alias: str) -> Optional[Tuple[str, str]]:
         """通过别名查找提供商和模型"""
         providers = self._config_data.get("providers", {})
@@ -136,7 +133,7 @@ class ConfigManager:
                 if alias in aliases:
                     return provider_name, model_name
         return None
-    
+
     def get_available_ai_types(self) -> list:
         """获取所有可用的AI类型别名"""
         aliases = []
@@ -146,7 +143,7 @@ class ConfigManager:
             for model_config in models.values():
                 aliases.extend(model_config.get("aliases", []))
         return aliases
-    
+
     def reload_config(self):
         """重新加载配置文件"""
         self._config_data = self._load_config()
@@ -169,5 +166,3 @@ def get_config_manager() -> ConfigManager:
 def get_config(section: str = None) -> Dict[str, Any]:
     """获取配置数据的便捷函数"""
     return _config_manager.get_config(section)
-
-
