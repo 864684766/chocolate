@@ -5,24 +5,14 @@
 ## 目录结构（多语言+多媒体）
 
 ```
-app/data_processing/
+app/rag/processing/
+  interfaces.py               # RawSample/ProcessedChunk + 协议接口
   pipeline.py                 # 管道编排（责任链/管道模式）
-  quality_checker.py          # 质量评估
-  lang/
-    zh/                       # 中文
-      text_cleaner.py
-      chunking.py
-      metadata_extractor.py
-    en/                       # 英文
-      text_cleaner.py
-      chunking.py
-      metadata_extractor.py
-    ja/ ...                   # 其他语言按需新增
-  media/
-    pdf_extractor.py          # PDF 解析（结构/表格/书签）
-    image_ocr.py              # 图片 OCR（可选 PaddleOCR/Tesseract）
-    audio_asr.py              # 音频转写（可选 Whisper/Vosk）
-    video_extractor.py        # 视频帧/字幕抽取
+  quality_checker.py          # 质量评估（SimpleQualityAssessor）
+  media_text.py               # 纯文本/Markdown基础解码（utf-8→gb18030→latin-1）
+  media_markdown.py           # Markdown 提取（去围栏/标题号）
+  lang_zh.py                  # 中文处理器（clean + chunk）
+  # 预留：media/pdf_extractor.py, media/image_ocr.py, media/audio_asr.py, media/video_extractor.py 等
 ```
 
 说明：
@@ -37,8 +27,9 @@ app/data_processing/
 
 ## 统一接口
 
-- `LanguageProcessor`：clean(text)->str, chunk(text)->List[str], extract_meta(text)->dict
-- `MediaExtractor`：extract(path|bytes)->{"text": str, "meta": {...}}
+- `LanguageProcessor`：clean(text)->str, chunk(text)->List[str], extract_meta()->dict
+- `MediaExtractor`：extract(RawSample)->{"text": str, "meta": {...}}
+- `QualityAssessor`：score(text, meta)->Dict[str, Any]
 
 ## 中文优化要点
 
