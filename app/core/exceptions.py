@@ -1,5 +1,16 @@
 # 文件: app/core/exceptions.py
 
+# 自定义异常类
+class DatabaseConnectionError(Exception):
+    """数据库连接异常"""
+    pass
+
+
+class DatabaseOperationError(Exception):
+    """数据库操作异常"""
+    pass
+
+
 from fastapi import FastAPI, Request
 # 导入 Exception 用于类型提示
 from fastapi.exceptions import RequestValidationError

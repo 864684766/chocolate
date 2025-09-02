@@ -948,9 +948,251 @@ pip install langchain-openai
 
 文档已合并（原 docs/DEVELOPMENT.md、docs/PATTERNS.md 内容已纳入本 README）。
 
+## ChromaDB 向量数据库集成
+
+### ChromaDBHelper 使用指南
+
+`ChromaDBHelper` 是一个完整的 ChromaDB 数据库助手类，提供了增删改查等完整的数据库操作功能。
+
+#### 特性
+
+- ✅ 连接管理和资源控制
+- ✅ 完整的 CRUD 操作
+- ✅ 异常处理和错误管理
+- ✅ 上下文管理器支持
+- ✅ 类型提示和文档
+- ✅ 向后兼容性
+
+#### 快速开始
+
+```python
+from app.core.chroma.db_helper import ChromaDBHelper
+
+# 创建助手实例
+helper = ChromaDBHelper()
+
+try:
+    # 自动连接数据库
+    client = helper.get_client()
+
+    # 获取或创建集合
+    collection = helper.get_collection("my_collection")
+
+    # 执行数据库操作...
+
+finally:
+    # 断开连接
+    helper.disconnect()
+```
+
+#### 使用上下文管理器（推荐）
+
+```python
+with ChromaDBHelper() as helper:
+    # 自动管理连接生命周期
+    collection = helper.get_collection("my_collection")
+    # 执行操作...
+# 自动断开连接
+```
+
+#### API 参考
+
+##### 连接管理
+
+- **`connect()`**: 建立数据库连接，返回 `chromadb.ClientAPI` 实例
+- **`disconnect()`**: 断开数据库连接
+- **`get_client()`**: 获取数据库客户端实例，如果未连接则自动连接
+- **`is_connected()`**: 检查是否已连接到数据库
+
+##### 集合管理
+
+- **`get_collection(name, create_if_not_exists=True)`**: 获取或创建集合
+- **`list_collections()`**: 列出所有集合名称
+- **`delete_collection(name)`**: 删除集合
+- **`modify(name, name=None, metadata=None)`**: 修改集合属性
+
+##### 数据操作
+
+- **`add(collection_name, documents=None, embeddings=None, metadatas=None, ids=None, **kwargs)`\*\*: 向集合中添加数据
+- **`query(collection_name, query_texts=None, query_embeddings=None, n_results=10, where=None, where_document=None, include=None, **kwargs)`\*\*: 查询集合中的数据
+- **`get(collection_name, ids=None, where=None, where_document=None, include=None, **kwargs)`\*\*: 获取集合中的数据
+- **`update(collection_name, ids, embeddings=None, metadatas=None, documents=None, **kwargs)`\*\*: 更新集合中的数据
+- **`delete(collection_name, ids=None, where=None, where_document=None)`**: 删除集合中的数据
+
+##### 辅助操作
+
+- **`count(collection_name)`**: 获取集合中的数据数量
+- **`peek(collection_name, limit=10)`**: 预览集合中的数据
+
+#### 类型提示说明
+
+##### Literal 类型
+
+`Literal` 是 Python 类型提示系统中的一个特殊类型，用于限制变量或参数只能接受特定的字面量值。它提供了比普通字符串类型更严格的类型检查。
+
+```python
+from typing import Literal
+
+# 在我们的代码中，IncludeField 限制了 include 参数只能是这些值：
+IncludeField = Literal["documents", "embeddings", "metadatas", "distances", "uris", "data"]
+
+# 使用示例
+def query(include: Optional[List[IncludeField]] = None):
+    # include 只能是 None 或者包含上述值的列表
+    pass
+
+# 正确的用法
+query(include=["documents", "metadatas"])  # ✅ 正确
+query(include=["embeddings", "distances"]) # ✅ 正确
+
+# 错误的用法
+query(include=["invalid_field"])           # ❌ 类型错误！
+```
+
+#### 配置要求
+
+确保你的 `config/app_config.json` 包含向量数据库配置：
+
+```json
+{
+  "vector_database": {
+    "host": "localhost",
+    "port": 8000
+  }
+}
+```
+
+#### 错误处理
+
+所有方法都会抛出 `DatabaseConnectionError` 异常，建议使用 try-catch 进行错误处理：
+
+```python
+try:
+    helper.add(
+        collection_name="documents",
+        documents=["测试文档"],
+        ids=["test1"]
+    )
+    print("数据添加成功")
+except DatabaseConnectionError as e:
+    print(f"数据库操作失败: {e}")
+```
+
+#### 最佳实践
+
+1. **使用上下文管理器**: 推荐使用 `with` 语句自动管理连接生命周期
+2. **异常处理**: 始终使用 try-catch 处理可能的异常
+3. **资源管理**: 及时断开不需要的连接
+4. **批量操作**: 对于大量数据，考虑批量添加而不是逐条添加
+5. **缓存策略**: 合理使用集合缓存，避免重复创建集合对象
+6. **返回值处理**: 注意 `add`、`update`、`delete` 方法没有返回值，`query` 和 `get` 方法返回 ChromaDB 结果对象
+7. **类型安全**: 使用 `Literal` 类型确保 `include` 参数的值是有效的
+
+#### 向后兼容
+
+为了保持向后兼容性，仍然提供了以下便捷函数：
+
+- `get_chroma_client()`: 获取 ChromaDB 客户端实例
+- `connection_db()`: 获取数据库连接（已废弃，建议使用 ChromaDBHelper 类）
+
+#### 示例代码
+
+完整的示例代码请参考 `app/core/chroma/example_usage.py` 文件，其中包含了各种使用场景的详细示例。
+
+### ChromaDB 拼写检查问题解决方案
+
+#### 问题描述
+
+在使用 ChromaDB 时，我们遇到了一个常见的拼写检查问题：
+
+- **ChromaDB API 使用 `metadatas`**（复数形式）
+- **PyCharm/IDE 拼写检查器认为 `metadatas` 是错误的**
+- **如果改为 `metadata`（单数形式），会导致类型错误**
+
+#### 为什么 ChromaDB 使用 `metadatas`？
+
+ChromaDB 是一个向量数据库，它的 API 设计遵循以下原则：
+
+1. **语义清晰性**: `metadatas` 表示多个元数据对象，而 `metadata` 表示单个元数据对象
+2. **API 一致性**: 与 `documents`、`embeddings` 等复数形式保持一致
+3. **官方标准**: 这是 ChromaDB 官方 API 的规范，不能随意更改
+
+#### 解决方案
+
+##### 1. 类型别名（推荐）
+
+我们创建了类型别名来避免拼写检查问题：
+
+```python
+# 类型别名，用于避免拼写检查问题
+MetadataList = List[Dict[str, Any]]  # 元数据列表类型
+
+def add(
+    self,
+    collection_name: str,
+    metadatas: Optional[MetadataList] = None,  # 使用类型别名
+    # ... 其他参数
+) -> None:
+    pass
+```
+
+##### 2. 详细注释说明
+
+在代码中添加详细的注释，说明为什么使用 `metadatas`：
+
+```python
+# 注意：ChromaDB API 使用 "metadatas"（复数形式），这是官方 API 的正确字段名
+# 虽然拼写检查器可能认为这是错误的，但这是 ChromaDB 库的标准
+IncludeField = Literal["documents", "embeddings", "metadatas", "distances", "uris", "data"]
+```
+
+#### 如何配置 IDE
+
+##### PyCharm
+
+1. **添加单词到字典**:
+
+   - 右键点击 `metadatas`
+   - 选择 "Spelling" → "Add to Dictionary"
+
+2. **配置拼写检查器**:
+
+   - File → Settings → Editor → Natural Languages → Spelling
+   - 在 "Custom Dictionaries" 中添加技术术语
+
+3. **忽略特定文件**:
+   - 在项目设置中标记 `db_helper.py` 为技术文档
+
+##### VS Code
+
+1. **安装拼写检查扩展**:
+
+   - Code Spell Checker
+   - 配置自定义词典
+
+2. **工作区设置**:
+   ```json
+   {
+     "cSpell.words": ["metadatas", "chromadb", "vectorization"]
+   }
+   ```
+
+#### 最佳实践
+
+1. **保持 API 一致性**: 始终使用 ChromaDB 官方 API 的字段名
+2. **类型安全**: 使用类型别名和 Literal 类型确保类型安全
+3. **文档化**: 在代码中添加清晰的注释说明
+4. **配置管理**: 使用配置文件来管理工具的行为
+
+#### 总结
+
+`metadatas` 是 ChromaDB 官方 API 的正确字段名，虽然拼写检查器可能认为这是错误的，但我们必须遵循官方规范。通过类型别名、详细注释和适当的配置，我们可以既保持代码的正确性，又避免拼写检查的干扰。
+
+记住：**API 的正确性比拼写检查器的建议更重要！**
+
 ### 模型提供商与 LangChain 库对照表（学习向）
 
-- 说明：不同提供商在 LangChain 里通常对应不同的 Python 包/类；若平台提供“OpenAI 兼容”端点，则可直接用 `langchain_openai.ChatOpenAI` 并设置 `base_url`。
+- 说明：不同提供商在 LangChain 里通常对应不同的 Python 包/类；若平台提供"OpenAI 兼容"端点，则可直接用 `langchain_openai.ChatOpenAI` 并设置 `base_url`。
 
 - 常见对照：
 
@@ -964,7 +1206,7 @@ pip install langchain-openai
 - 查询入口：
   - LangChain 官方 Integrations（按 Provider 搜索）：`https://python.langchain.com/docs/integrations/providers/`。
   - 具体到聊天模型（Chat Models）：`https://python.langchain.com/docs/integrations/chat/`。
-  - OpenAI 兼容如何使用：参考 `langchain_openai` 文档并查看各平台“OpenAI-Compatible API”说明。
+  - OpenAI 兼容如何使用：参考 `langchain_openai` 文档并查看各平台"OpenAI-Compatible API"说明。
 
 ### LangSmith 配置与使用（本项目已内置）
 

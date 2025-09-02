@@ -123,6 +123,10 @@ class ConfigManager:
         provider_config = self.get_provider_config(provider)
         return provider_config.get("models", {}).get(model, {})
 
+    def get_vector_database_config(self) -> Dict[str, Any]:
+        """获取向量数据库的配置"""
+        return self._config_data.get("vector_database",{})
+
     def _find_model_by_alias(self, alias: str) -> Optional[Tuple[str, str]]:
         """通过别名查找提供商和模型"""
         providers = self._config_data.get("providers", {})

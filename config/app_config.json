@@ -34,8 +34,9 @@
     "description": "Agent执行器配置"
   },
 
-  "chroma": {
-    "url": "http://124.71.135.104:8000/",
+  "vector_database": {
+    "host": "124.71.135.104",
+    "port": 8000,
     "storage": {
       "type": "remote",
       "path": "/data/chromadb",
