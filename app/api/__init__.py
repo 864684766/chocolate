@@ -8,6 +8,7 @@ from starlette.responses import JSONResponse
 from app.core.exceptions import register_exception_handlers
 from .health import router as health_router
 from .agent import router as agent_router
+from .ingestion import router as ingestion_router
 
 def create_app() -> FastAPI:
     """创建并配置 FastAPI 应用。"""
@@ -23,5 +24,8 @@ def create_app() -> FastAPI:
     
     # Agent 相关路由
     app.include_router(agent_router, prefix="/agent", tags=["agent"])
+    
+    # 数据接入（手动上传等）
+    app.include_router(ingestion_router, prefix="/ingestion", tags=["ingestion"])
     
     return app

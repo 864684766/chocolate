@@ -13,15 +13,17 @@
 
 ```
 app/data_ingestion/
-  base/                   # 抽象基类与接口
   sources/
-    manual_upload.py      # 手动上传
-    web_crawler.py        # 网页爬虫（可配合 selenium）
-    api_integration.py    # 三方 API
-    file_monitor.py       # 文件系统监控（watchdog）
-  plugins/                # 第三方热插拔数据源
-  manager.py              # 统一管理器
+    manual_upload.py      # 手动上传（已实现）
 ```
+
+说明：为尽快提供可用能力，目前仅落地了 `manual_upload.py`。其余模块暂未创建，待需求到来时再按此约定扩展：
+
+- web_crawler.py（网页爬虫）
+- api_integration.py（三方 API 接入）
+- file_monitor.py（文件系统监控）
+- manager.py（数据源管理器，统一调度与状态）
+- plugins/（第三方热插拔数据源）
 
 ## 多媒体接入
 
