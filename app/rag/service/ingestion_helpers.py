@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional, Dict, Any, Tuple
 from fastapi import UploadFile, HTTPException
+import os
 
 from app.rag.data_ingestion.validators import classify_files, SUPPORTED_EXTENSIONS
 from app.rag.data_ingestion.sources.manual_upload import ManualUploadSource, UploadItem
@@ -27,6 +28,44 @@ def classify_or_400(files: List[UploadFile]) -> Tuple[List[UploadFile], List[Dic
     )
 
 
+# ---- media type helpers ----
+_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
+_VIDEO_EXT = {".mp4", ".mov", ".avi", ".mkv", ".flv", ".wmv", ".webm"}
+_AUDIO_EXT = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus"}
+_PDF_EXT = {".pdf"}
+_TEXT_EXT = {".txt", ".md", ".rst", ".csv", ".tsv", ".json"}
+
+
+def detect_media_type(filename: str, content_type: Optional[str]) -> str:
+    """根据 content_type 与文件后缀推断媒体类型。
+    结果仅用于路由处理：image | video | audio | pdf | text
+    """
+    if content_type:
+        ct = content_type.lower()
+        if ct.startswith("image/"):
+            return "image"
+        if ct.startswith("video/"):
+            return "video"
+        if ct.startswith("audio/"):
+            return "audio"
+        if ct == "application/pdf":
+            return "pdf"
+        if ct.startswith("text/"):
+            return "text"
+
+    _, ext = os.path.splitext(filename.lower())
+    if ext in _IMAGE_EXT:
+        return "image"
+    if ext in _VIDEO_EXT:
+        return "video"
+    if ext in _AUDIO_EXT:
+        return "audio"
+    if ext in _PDF_EXT:
+        return "pdf"
+    # 默认按文本处理
+    return "text"
+
+
 async def build_upload_items(accepted: List[UploadFile], dataset: Optional[str]) -> List[UploadItem]:
     """
     构建上传条目列表。
@@ -35,11 +74,15 @@ async def build_upload_items(accepted: List[UploadFile], dataset: Optional[str])
     items: List[UploadItem] = []
     for f in accepted:
         content = await f.read()
+        media_type = detect_media_type(f.filename, f.content_type)
+        meta: Dict[str, Any] = {"media_type": media_type}
+        if dataset:
+            meta["dataset"] = dataset
         items.append(UploadItem(
             filename=f.filename,
             content_type=f.content_type or "application/octet-stream",
             bytes_data=content,
-            metadata={"dataset": dataset} if dataset else None,
+            metadata=meta,
         ))
     return items
 

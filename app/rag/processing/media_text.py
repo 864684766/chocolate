@@ -10,6 +10,9 @@ class PlainTextExtractor(MediaExtractor):
     """
 
     def extract(self, sample: RawSample) -> Dict[str, Any]:
+        """
+        将二进制样本转成 text + meta。
+        """
         meta = dict(sample.meta)
         try:
             text = sample.bytes.decode("utf-8")

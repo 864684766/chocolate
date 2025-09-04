@@ -46,11 +46,6 @@ class ConfigManager:
 
     def get_settings(self, ai_type: Optional[str] = None, provider: Optional[str] = None) -> Settings:
         """获取配置，支持AI类型和提供商参数"""
-
-        # 确定提供商和模型
-        cur_provider = None
-        model = None
-
         if provider:
             cur_provider = provider.lower()
             model = ai_type.lower().replace('_', '-') if ai_type else self._config_data["llm"]["default_model"]
@@ -126,6 +121,22 @@ class ConfigManager:
     def get_vector_database_config(self) -> Dict[str, Any]:
         """获取向量数据库的配置"""
         return self._config_data.get("vector_database",{})
+
+    def get_media_processing_config(self) -> Dict[str, Any]:
+        """获取媒体处理配置"""
+        return self._config_data.get("media_processing", {})
+
+    def get_image_captioning_config(self) -> Dict[str, Any]:
+        """获取图像描述配置"""
+        return self.get_media_processing_config().get("image_captioning", {})
+
+    def get_ocr_config(self) -> Dict[str, Any]:
+        """获取OCR配置"""
+        return self.get_media_processing_config().get("ocr", {})
+
+    def get_video_processing_config(self) -> Dict[str, Any]:
+        """获取视频处理配置"""
+        return self.get_media_processing_config().get("video_processing", {})
 
     def _find_model_by_alias(self, alias: str) -> Optional[Tuple[str, str]]:
         """通过别名查找提供商和模型"""
