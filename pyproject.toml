@@ -37,6 +37,7 @@ matplotlib = "^3.10.6"
 einops = "^0.8.1"
 transformers-stream-generator = "^0.0.5"
 accelerate = "^1.10.1"
+optimum = "^1.27.0"
 
 
 [build-system]

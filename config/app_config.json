@@ -173,7 +173,7 @@
   "media_processing": {
     "image_captioning": {
       "enabled": true,
-      "model": "Qwen/Qwen-VL-Chat",
+      "model": "Qwen/Qwen-VL-Chat-Int4",
       "backend": "qwen-vl-chat",
       "prompt": "请用中文简洁描述这张图片：",
       "generation": {
