@@ -6,9 +6,14 @@
 """
 
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from abc import ABC, abstractmethod
 from app.config import get_config_manager
+from app.core.quality_utils import (
+    filter_captions,
+    dedup_captions,
+    clip_rerank,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +45,7 @@ class ImageVisionExtractor(MediaExtractor):
         self._caption_config = self._config_manager.get_image_captioning_config()
         self._caption_available = self._check_caption()
         self._embed_available = self._check_text_embed()
+        self._last_clip_scores: List[Tuple[str, float]] = []
 
     def is_available(self) -> bool:
         return self._caption_available or self._embed_available
@@ -64,7 +70,6 @@ class ImageVisionExtractor(MediaExtractor):
 
     def extract(self, content: bytes, meta: Dict[str, Any]) -> Dict[str, Any]:
         captions: List[str] = []
-        caption_embed: Optional[List[float]] = None
         
         # 初始化变量，避免作用域问题
         model_name = "Salesforce/blip-image-captioning-base"
@@ -72,13 +77,8 @@ class ImageVisionExtractor(MediaExtractor):
         embedding_config = {}
 
         # 检查是否启用图像描述功能
-        if not self._caption_config.get("enabled", True):
-            logger.info("Image captioning is disabled in config")
-            return {
-                "captions": [],
-                "caption_embedding": None,
-                "vision_meta": {"caption_model": None, "embed_model": None},
-            }
+        if not self._is_captioning_enabled():
+            return self._empty_caption_payload()
 
         if self._caption_available:
             try:
@@ -86,19 +86,13 @@ class ImageVisionExtractor(MediaExtractor):
             except (ImportError, ModuleNotFoundError, OSError, RuntimeError) as e:
                 logger.warning(f"caption generation failed: {e}")
 
+        # 可选：英文→中文翻译
+        captions = self._translate_en_to_zh(captions)
+
         # 生成嵌入向量
-        if captions and self._embed_available:
-            try:
-                embedding_config = self._caption_config.get("embedding", {})
-                if embedding_config.get("enabled", True):
-                    from sentence_transformers import SentenceTransformer
-                    embed_model = embedding_config.get("model", "clip-ViT-B-32")
-                    model = SentenceTransformer(embed_model)
-                    vec = model.encode(captions[0])
-                    caption_embed = vec.tolist() if hasattr(vec, "tolist") else None
-                    logger.info(f"Generated embedding using model: {embed_model}")
-            except (ImportError, ModuleNotFoundError, OSError, RuntimeError) as e:
-                logger.warning(f"caption embedding failed: {e}")
+        caption_embed, embed_model_name = self._generate_caption_embedding(captions)
+        if embed_model_name:
+            embedding_config = {"model": embed_model_name}
 
         return {
             "captions": captions,
@@ -120,9 +114,8 @@ class ImageVisionExtractor(MediaExtractor):
 
         model_name = self._caption_config.get("model", "Salesforce/blip-image-captioning-base")
         generation_config = self._caption_config.get("generation", {})
-        prompt_text = str(self._caption_config.get("prompt", "Describe this image briefly:")).strip()
-        backend = str(self._caption_config.get("backend", "image-to-text")).strip().lower()
-
+        filter_config = self._caption_config.get("filters", {})
+        embed_conf = self._caption_config.get("embedding", {})
         num_captions = generation_config.get("num_captions", 1)
         max_length = generation_config.get("max_length", 50)
         temperature = generation_config.get("temperature", 0.7)
@@ -131,16 +124,34 @@ class ImageVisionExtractor(MediaExtractor):
 
         image = Image.open(io.BytesIO(content)).convert("RGB")
 
-        # 后端-模型一致性校验：若选择 qwen-vl-chat 但模型非 Qwen 家族，则回退到 image-to-text
-        if backend == "qwen-vl-chat" and "qwen" not in model_name.lower():
-            logger.warning(
-                f"backend is 'qwen-vl-chat' but model='{model_name}'. Fallback to 'image-to-text'."
-            )
-            backend = "image-to-text"
+        # 1) 生成英文候选
+        captions = self._generate_with_image2text(
+            model_name, image, num_captions, max_length, temperature, do_sample, remove_duplicates
+        )
 
-        if backend == "qwen-vl-chat":
-            return self._generate_with_qwen(model_name, image, prompt_text, num_captions, max_length, temperature, do_sample, remove_duplicates)
-        return self._generate_with_image2text(model_name, image, num_captions, max_length, temperature, do_sample, remove_duplicates)
+        # 2) 规则过滤（长度/黑名单/乱码/重复片段）
+        if captions:
+            captions = filter_captions(
+                captions,
+                min_len=int(filter_config.get("min_length", 5)),
+                max_len=int(filter_config.get("max_length", 120)),
+                blacklist_keywords=list(filter_config.get("blacklist_keywords", [])),
+                max_gibberish_ratio=float(filter_config.get("max_gibberish_ratio", 0.3)),
+                forbid_repeat_ngram=int(filter_config.get("forbid_repeat_ngram", 3)),
+            )
+
+        # 3) 近似去重（可选）
+        if captions:
+            captions = dedup_captions(
+                captions,
+                approx=True,
+                threshold=0.95,
+                embed_model=embed_conf.get("model"),
+            )
+
+        # 4) 可选：CLIP 粗排并阈值过滤，提升图像一致性
+        captions = self._rerank_with_clip(image, captions)
+        return captions
 
     @staticmethod
     def _generate_with_image2text(model_name: str,
@@ -181,47 +192,111 @@ class ImageVisionExtractor(MediaExtractor):
         logger.info(f"Generated {len(captions)} captions using backend: image-to-text, model: {model_name}")
         return captions
 
+    # 使用 CLIP 重排：根据图像-文本相似度挑选更贴近图片的候选
+    def _rerank_with_clip(self, image, captions: List[str]) -> List[str]:
+        if not captions:
+            return captions
+        rerank_cfg = self._caption_config.get("rerank", {})
+        if not rerank_cfg.get("enabled", False):
+            return captions
+        try:
+            model_name = rerank_cfg.get("model", "openai/clip-vit-base-patch32")
+            top_k = int(rerank_cfg.get("top_k", 2))
+            min_prob = float(rerank_cfg.get("min_clip_prob", 0.0))
+            ranked = clip_rerank(image, captions, model_name=model_name, top_k=max(1, top_k))
+            # 记录分数供上层写入 meta
+            self._last_clip_scores = ranked
+            # 应用最小阈值过滤
+            filtered = [c for c, p in ranked if p >= min_prob]
+            return filtered or [c for c, _ in ranked]
+        except (ImportError, ModuleNotFoundError) as e:
+            logger.info(f"CLIP rerank not available: {e}")
+            return captions
+        except Exception as e:
+            logger.warning(f"CLIP rerank failed: {e}")
+            return captions
+
+    # 是否启用图像描述
+    def _is_captioning_enabled(self) -> bool:
+        enabled = bool(self._caption_config.get("enabled", True))
+        if not enabled:
+            logger.info("Image captioning is disabled in config")
+        return enabled
+
+    # 空结果负载
     @staticmethod
-    def _generate_with_qwen(model_name: str,
-                            image,
-                            prompt_text: str,
-                            num_captions: int,
-                            max_length: int,
-                            temperature: float,
-                            do_sample: bool,
-                            remove_duplicates: bool) -> List[str]:
-        from transformers import AutoTokenizer, AutoModelForCausalLM
-        import torch
-        captions: List[str] = []
-        tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            torch_dtype=torch.bfloat16 if torch.cuda.is_available() else None,
-            device_map="auto",
-            trust_remote_code=True,
-        )
-        # 使用 Qwen-VL 的 chat 接口（trust_remote_code=True）
-        messages = [{
-            "role": "user",
-            "content": [
-                {"type": "image", "image": image},
-                {"type": "text", "text": prompt_text}
-            ]
-        }]
-        with torch.no_grad():
-            for _ in range(max(1, int(num_captions))):
-                response, _ = model.chat(
-                    tokenizer,
-                    messages,
-                    temperature=temperature,
-                    max_new_tokens=max_length,
-                    do_sample=do_sample,
-                )
-                text = str(response).strip()
-                if text and (not remove_duplicates or text not in captions):
-                    captions.append(text)
-        logger.info(f"Generated {len(captions)} captions using backend: qwen-vl-chat, model: {model_name}")
+    def _empty_caption_payload() -> Dict[str, Any]:
+        return {
+            "captions": [],
+            "caption_embedding": None,
+            "vision_meta": {"caption_model": None, "embed_model": None},
+        }
+
+    # 生成嵌入向量（单一职责）
+    def _generate_caption_embedding(self, captions: List[str]) -> Tuple[Optional[List[float]], Optional[str]]:
+        if not captions or not self._embed_available:
+            return None, None
+        try:
+            embedding_config = self._caption_config.get("embedding", {})
+            if not embedding_config.get("enabled", True):
+                return None, None
+            from sentence_transformers import SentenceTransformer
+            embed_model = embedding_config.get("model", "clip-ViT-B-32")
+            model = SentenceTransformer(embed_model)
+            vec = model.encode(captions[0])
+            caption_embed = vec.tolist() if hasattr(vec, "tolist") else None
+            logger.info(f"Generated embedding using model: {embed_model}")
+            return caption_embed, embed_model
+        except (ImportError, ModuleNotFoundError, OSError, RuntimeError) as e:
+            logger.warning(f"caption embedding failed: {e}")
+            return None, None
+
+    # 翻译：英文→中文（基于配置，可选）
+    def _translate_en_to_zh(self, captions: List[str]) -> List[str]:
+        if not captions:
+            return captions
+        translation_cfg = self._caption_config.get("translation", {})
+        if not translation_cfg.get("enabled", False):
+            return captions
+        try:
+            model_path = translation_cfg.get("model", "Helsinki-NLP/opus-mt-en-zh")
+            batch_size = int(translation_cfg.get("batch_size", 16))
+            from transformers import pipeline
+            try:
+                translator = pipeline("translation_en_to_zh", model=model_path)
+            except (ValueError, RuntimeError, OSError, TypeError):
+                try:
+                    translator = pipeline("translation", model=model_path, src_lang="en", tgt_lang="zh")
+                except (ValueError, RuntimeError, OSError, TypeError) as e:
+                    logger.error(f"create translation pipeline failed: {e}")
+                    raise RuntimeError(f"create translation pipeline failed: {e}") from e
+
+            zh_captions: List[str] = []
+            for i in range(0, len(captions), batch_size):
+                chunk = captions[i:i+batch_size]
+                try:
+                    out = translator(chunk)
+                except TypeError:
+                    out = [translator(text)[0] for text in chunk]
+                for item in out:
+                    text = item.get("translation_text") if isinstance(item, dict) else str(item)
+                    text = (text or "").strip()
+                    if text and text not in zh_captions:
+                        zh_captions.append(text)
+            if zh_captions:
+                logger.info("Translated captions EN→ZH via MarianMT")
+                return zh_captions
+        except (ImportError, ModuleNotFoundError) as e:
+            # 典型错误：缺少 sentencepiece
+            logger.error(f"translation pipeline not available: {e}")
+            raise
+        except (RuntimeError, ValueError, TypeError, OSError) as e:
+            logger.error(f"caption translation failed: {e}")
+            raise
         return captions
+
+    
+
 
 
 class ImageOCRExtractor(MediaExtractor):

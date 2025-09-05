@@ -55,9 +55,7 @@ app/rag/processing/
   "media_processing": {
     "image_captioning": {
       "enabled": true,
-      "model": "Salesforce/blip-image-captioning-base",
-      "backend": "image-to-text",
-      "prompt": "Describe this image briefly:",
+      "model": "D:/models/Salesforce/blip-image-captioning-base",
       "generation": {
         "num_captions": 1,
         "max_length": 50,
@@ -65,23 +63,48 @@ app/rag/processing/
         "do_sample": true,
         "remove_duplicates": true
       },
+      "filters": {
+        "min_length": 5,
+        "max_length": 120,
+        "max_gibberish_ratio": 0.3,
+        "forbid_repeat_ngram": 3,
+        "blacklist_keywords": ["优惠", "扫码", "购买", "VX"]
+      },
+      "rerank": {
+        "enabled": true,
+        "model": "D:/models/openai/clip-vit-base-patch32",
+        "top_k": 2,
+        "min_clip_prob": 0.2
+      },
+      "cross_rerank": {
+        "enabled": false,
+        "model": "BAAI/bge-reranker-base",
+        "min_score": 0.5,
+        "top_k": 1
+      },
       "embedding": {
         "enabled": true,
-        "model": "clip-ViT-B-32",
-        "dimension": 512
+        "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        "dimension": 384
+      },
+      "translation": {
+        "enabled": true,
+        "model": "D:/models/Helsinki-NLP/opus-mt-en-zh",
+        "backend": "hf_pipelines",
+        "batch_size": 16
       }
     }
   }
 }
 ```
 
-**配置参数说明**：
+**配置参数说明（与当前代码实现一致）**：
 
 - **enabled**: 是否启用图像描述功能
-- **model**: 使用的图像描述模型（单一模型）
+- **model**: 使用的图像描述模型（单一模型，建议本地路径）
 - **backend**: 字幕后端选择，提升可读性与可控性
   - `image-to-text`: 传统图像字幕管线（如 BLIP），忽略 prompt
-  - `qwen-vl-chat`: 多模态对话模型（如 Qwen/Qwen-VL-Chat），使用 prompt 作为指令
+  - `qwen-chat`: 多模态对话模型（如 Qwen/qwen-chat），使用 prompt 作为指令
 - **prompt**: 描述生成提示词（完全由配置决定，可写中文或英文），例如：
   - 中文：`"请用中文简洁描述这张图片："`
   - 英文：`"Describe this image in concise English:"`
@@ -91,10 +114,23 @@ app/rag/processing/
   - `temperature`: 生成温度，控制随机性（默认：0.7）
   - `do_sample`: 是否使用采样（默认：true）
   - `remove_duplicates`: 是否移除重复描述（默认：true）
+- **rerank**: 粗排配置（提高“图像 ↔ 文本”一致性）
+
+  - `enabled`: 是否启用 CLIP 粗排
+  - `model`: CLIP 模型（默认示例：`openai/clip-vit-base-patch32`，可指向本地路径）
+  - `top_k`: 粗排后保留的候选数
+
 - **embedding**: 嵌入向量配置
+
   - `enabled`: 是否生成嵌入向量（默认：true）
-  - `model`: 嵌入模型名称（默认：clip-ViT-B-32）
-  - `dimension`: 向量维度（默认：512）
+  - `model`: 推荐 `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`（多语言效果更稳）。注意：代码中的“默认回退值”为 `clip-ViT-B-32`，仅在配置缺失时作为兜底；若你在 `app_config.json` 指定了 `sentence-transformers/...`，则实际以配置为准。
+  - `dimension`: 向量维度（与所选模型一致，`paraphrase-multilingual-MiniLM-L12-v2` 为 384）
+
+- **translation**: EN→ZH 翻译配置（用于将英文描述稳定翻译为中文）
+  - `enabled`: 是否启用翻译
+  - `model`: 推荐 `Helsinki-NLP/opus-mt-en-zh`，支持本地路径
+  - `backend`: 目前使用 `hf_pipelines`
+  - `batch_size`: 批量翻译时单批大小
 
 #### 2. OCR 配置 (ocr)
 
@@ -167,43 +203,18 @@ result = extractor.extract(image_bytes, {"media_type": "image"})
 #### 2. 控制输出风格/语言
 
 通过配置文件中的 `image_captioning.prompt` 控制，无需在代码中传 `meta`。运行时修改提示词需重载配置。
-当 `backend` 为 `image-to-text` 时，部分模型（如 BLIP）不支持指令，`prompt` 将被忽略；当 `backend` 为 `qwen-vl-chat` 时，`prompt` 会作为文本指令参与生成。
+当 `backend` 为 `image-to-text` 时，部分模型（如 BLIP）不支持指令，`prompt` 将被忽略；当 `backend` 为 `qwen-chat` 时，`prompt` 会作为文本指令参与生成。
 
-#### 3. 如何选择 model（与 backend 的对应关系）
+#### 3. 模型与语言策略
 
-- 想用 BLIP 等“图像字幕”模型：
-
-  - 配置示例：
-    ```json
-    {
-      "media_processing": {
-        "image_captioning": {
-          "backend": "image-to-text",
-          "model": "Salesforce/blip-image-captioning-base"
-        }
-      }
-    }
-    ```
-  - 说明：此类模型经 `pipeline("image-to-text")` 调用，通常默认产出英文，`prompt` 多数会被忽略。
-
-- 想用 Qwen 的“多模态对话”模型：
-  - 配置示例：
-    ```json
-    {
-      "media_processing": {
-        "image_captioning": {
-          "backend": "qwen-vl-chat",
-          "model": "Qwen/Qwen-VL-Chat"
-        }
-      }
-    }
-    ```
-  - 说明：必须把 `model` 配成 Qwen 家族（名称中包含 `qwen` 与 `vl` 的模型），否则将回退到 `image-to-text` 后端；该后端支持 `prompt`，可直接中文指令生成中文描述。
+- 图像字幕建议使用 `Salesforce/blip-image-captioning-base` 通过 `image-to-text` 管线生成英文描述。
+- 若需要中文向量检索，建议在应用层对英文描述进行稳定翻译（EN→ZH），再用多语言嵌入模型生成向量。
+- 检索查询亦建议统一语种（例如全部中文），必要时对查询做相同翻译归一化。
 
 #### 4. 后端依赖与建议
 
 - `image-to-text`: 依赖 `transformers`, `torch`, `pillow`
-- `qwen-vl-chat`: 需较新 `transformers` 且开启 `trust_remote_code=True`，显卡上建议 bfloat16/float16 与 `device_map="auto"`
+- `qwen-chat`: 需较新 `transformers` 且开启 `trust_remote_code=True`，显卡上建议 bfloat16/float16 与 `device_map="auto"`
 
 #### 5. 控制生成数量
 

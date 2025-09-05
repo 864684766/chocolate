@@ -173,20 +173,43 @@
   "media_processing": {
     "image_captioning": {
       "enabled": true,
-      "model": "Qwen/Qwen-VL-Chat-Int4",
-      "backend": "qwen-vl-chat",
-      "prompt": "请用中文简洁描述这张图片：",
+      "model": "D:/models/Salesforce/blip-image-captioning-base",
       "generation": {
         "num_captions": 3,
         "max_length": 50,
-        "temperature": 1.1,
+        "temperature": 0.7,
         "do_sample": true,
         "remove_duplicates": true
       },
+      "filters": {
+        "min_length": 5,
+        "max_length": 120,
+        "max_gibberish_ratio": 0.3,
+        "forbid_repeat_ngram": 3,
+        "blacklist_keywords": ["优惠", "扫码", "购买", "VX"]
+      },
+      "rerank": {
+        "enabled": true,
+        "model": "D:/models/openai/clip-vit-base-patch32",
+        "top_k": 2,
+        "min_clip_prob": 0.2
+      },
+      "cross_rerank": {
+        "enabled": false,
+        "model": "BAAI/bge-reranker-base",
+        "min_score": 0.5,
+        "top_k": 1
+      },
       "embedding": {
         "enabled": true,
-        "model": "clip-ViT-B-32",
-        "dimension": 512
+        "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        "dimension": 384
+      },
+      "translation": {
+        "enabled": true,
+        "model": "D:/models/Helsinki-NLP/opus-mt-en-zh",
+        "backend": "hf_pipelines",
+        "batch_size": 16
       }
     },
     "ocr": {
