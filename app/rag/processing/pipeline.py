@@ -7,6 +7,8 @@ from .media_text import PlainTextExtractor
 from .lang_zh import ChineseProcessor
 from .media_chunking import ChunkingStrategyFactory
 from .media_extractors import MediaExtractorFactory
+from app.config import get_config_manager
+from app.core.chunking import decide_chunk_params
 
 
 class ProcessingPipeline:
@@ -80,10 +82,13 @@ class ProcessingPipeline:
         media_type = meta.get("media_type", "text")
         content = extracted.get("content", extracted.get("text", ""))
 
+        # 计算分块参数：从核心 chunking 模块获取（可配置+自适应）
+        chunk_size, overlap = decide_chunk_params(str(media_type), content, meta)
+
         strategy = ChunkingStrategyFactory.create_strategy(
             str(media_type),
-            chunk_size=800,
-            overlap=150
+            chunk_size=chunk_size,
+            overlap=overlap
         )
 
         chunk_results = strategy.chunk(content, meta)  # type: ignore[arg-type]
@@ -96,5 +101,7 @@ class ProcessingPipeline:
                 chunk_meta.update(self.quality.score(chunk_text, chunk_meta))
             chunks.append(ProcessedChunk(text=chunk_text, meta=chunk_meta))
         return chunks
+
+    # 说明：分块参数算法已抽到 app.core.chunking 模块复用
 
 

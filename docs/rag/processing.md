@@ -34,6 +34,67 @@ app/rag/processing/
 - `MediaExtractor`：extract(RawSample)->{"text": str, "meta": {...}}
 - `QualityAssessor`：score(text, meta)->Dict[str, Any]
 
+## 分块参数决策（新）
+
+为适配不同媒体与上下文窗口，已将“分块参数决策”独立为核心模块：`app/core/chunking.py`。
+
+- 入口函数：`decide_chunk_params(media_type: str, content: Any, meta: dict) -> (chunk_size, overlap)`
+- 用途：基于配置与内容特征，输出稳健的 `chunk_size/overlap`；不直接做切块，便于被 `media_chunking` 的具体策略复用。
+- 支持媒体类型：`text/pdf/image/video/audio/code`（可扩展）
+- 工作方式：
+  - 读取 `config/app_config.json > media_processing.chunking`；
+  - 当 `auto=false` 使用表驱动默认值；当 `auto=true` 或缺省时，依据目标 token、上下文上限、内容规模自适应计算；
+  - 可通过 `meta` 注入更细粒度的信号做微调（如 OCR 噪声、语速、字幕密度等）。
+
+### app_config.json 新增配置
+
+```json
+{
+  "media_processing": {
+    "chunking": {
+      "auto": true,
+      "defaults": { "chunk_size": 800, "overlap": 150 },
+      "by_media_type": {
+        "text": { "chunk_size": 800, "overlap": 120 },
+        "pdf": { "chunk_size": 900, "overlap": 180 },
+        "image": { "chunk_size": 300, "overlap": 80 },
+        "video": { "chunk_size": 1000, "overlap": 200 },
+        "audio": { "chunk_size": 1000, "overlap": 200 },
+        "code": { "chunk_size": 400, "overlap": 160 }
+      },
+      "targets": {
+        "target_tokens_per_chunk": 512,
+        "overlap_ratio": 0.15,
+        "max_context_tokens": 8192
+      }
+    }
+  }
+}
+```
+
+说明：
+
+- **auto**: 是否启用自适应；关闭时走表驱动；
+- **defaults/by_media_type**: 提供基线值，亦作为自适应上下限保护；
+- **targets**: 目标片长、overlap 比例、上下文窗口（按使用模型的 context 调整）。
+
+### 在管道中的接入
+
+`app/rag/processing/pipeline.py` 中通过：
+
+```python
+from app.core.chunking import decide_chunk_params
+
+chunk_size, overlap = decide_chunk_params(str(media_type), content, meta)
+strategy = ChunkingStrategyFactory.create_strategy(
+    str(media_type),
+    chunk_size=chunk_size,
+    overlap=overlap,
+)
+```
+
+这样即可在不修改业务代码的前提下，通过配置或自适应策略动态控制分块。
+
 ## 中文优化要点
 
 - 分词：jieba + 自定义词典
@@ -132,6 +193,20 @@ app/rag/processing/
   - `backend`: 目前使用 `hf_pipelines`
   - `batch_size`: 批量翻译时单批大小
 
+#### 4. 分块参数配置 (chunking)
+
+位置：`media_processing.chunking`
+
+- **auto**: 是否启用自适应分块。true=依据内容与目标自动估算；false=按表驱动。
+- **defaults**: 通用基线 `chunk_size/overlap`，类型未命中或用于自适应上下限保护时使用。
+- **by_media_type**: 按媒体类型细化的基线参数（text/pdf/image/video/audio/code）。
+- **targets**:
+  - `target_tokens_per_chunk`: 期望的每块 token 目标（近似）。
+  - `overlap_ratio`: 相邻块重叠比例（0~1）。
+  - `max_context_tokens`: 模型上下文窗口上限（一般取 context 的 1/4 作为 chunk 上限）。
+
+说明：分块参数由 `app/core/chunking.py` 的 `decide_chunk_params()` 统一计算，管道端只接收计算结果并创建具体的分块策略。
+
 #### 2. OCR 配置 (ocr)
 
 ```json
@@ -200,6 +275,19 @@ extractor = ImageVisionExtractor()
 result = extractor.extract(image_bytes, {"media_type": "image"})
 ```
 
+#### 3. 分块参数的使用示例（文本/PDF/媒体）
+
+```python
+from app.core.chunking import decide_chunk_params
+
+media_type = "pdf"
+content = large_pdf_plain_text  # 经过提取后的可切分文本
+meta = {"language": "zh"}
+
+chunk_size, overlap = decide_chunk_params(media_type, content, meta)
+# 然后将参数传入具体的 chunking 策略
+```
+
 #### 2. 控制输出风格/语言
 
 通过配置文件中的 `image_captioning.prompt` 控制，无需在代码中传 `meta`。运行时修改提示词需重载配置。
@@ -228,6 +316,26 @@ result = extractor.extract(image_bytes, {"media_type": "image"})
   }
 }
 ```
+
+## 当前处理阶段产物与下一步
+
+- 处理阶段产物：`ProcessingPipeline` 将 `RawSample` 规范化并输出 `ProcessedChunk(text, meta)` 列表（在媒体场景下会先经 `MediaExtractor` → 文本/字幕，再进入分块策略）。
+- 向量化状态：当前仓库尚未在处理阶段内直接完成“向量化”；向量数据库访问层已具备（`app/core/chroma/db_helper.py` 提供 Chroma 连接与集合操作），但需要在“向量化层”补充：
+  1. 选择/配置嵌入模型（推荐多语言 `sentence-transformers` 系列）；
+  2. 为每个 `ProcessedChunk.text` 生成向量；
+  3. 调用 `ChromaDBHelper.add(collection_name, documents, embeddings, metadatas, ids)` 入库；
+  4. 统一 collection 命名与字段规范（如 `doc_id`, `chunk_index`, `media_type`）。
+
+### 向量化层开发建议（下一步）
+
+- 目录：`app/rag/vectorization/`（建议新建）
+  - `embedder.py`：封装嵌入模型加载与批量编码（支持本地/云端模型，带重试与批处理）；
+  - `indexer.py`：将 `ProcessedChunk` 批量写入 Chroma；
+  - `config.py`：向量化配置（模型名、批大小、并发、重试策略、集合命名规则）。
+- 简要流程：`chunks = ProcessingPipeline.run(samples)` → `embeddings = Embedder.encode([c.text for c in chunks])` → `ChromaDBHelper.add(...)`。
+- 回收策略：对空文本、低质量片段（由 `quality_checker` 标记）可跳过或降权；重入时做 `id`/`md5` 去重。
+
+---
 
 ### 常见问题
 

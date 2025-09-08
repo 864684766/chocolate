@@ -9,7 +9,7 @@ from app.rag.service.ingestion_helpers import (
     run_manual_upload,
     build_response,
     make_raw_sample_objects,
-    run_processing,
+    process_and_vectorize,
 )
 
 
@@ -30,7 +30,7 @@ async def upload_files(
     items = await build_upload_items(accepted, dataset)
     raw_list = run_manual_upload(items)
     samples = make_raw_sample_objects(raw_list)
-    chunks_cnt = run_processing(samples)
-    return build_response(len(files), accepted, rejected, raw_list, dataset, chunks_cnt)
+    result = process_and_vectorize(samples)
+    return build_response(len(files), accepted, rejected, raw_list, dataset, result.get("chunks"))
 
 

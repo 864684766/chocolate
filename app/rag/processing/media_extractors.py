@@ -262,14 +262,9 @@ class ImageVisionExtractor(MediaExtractor):
             model_path = translation_cfg.get("model", "Helsinki-NLP/opus-mt-en-zh")
             batch_size = int(translation_cfg.get("batch_size", 16))
             from transformers import pipeline
-            try:
-                translator = pipeline("translation_en_to_zh", model=model_path)
-            except (ValueError, RuntimeError, OSError, TypeError):
-                try:
-                    translator = pipeline("translation", model=model_path, src_lang="en", tgt_lang="zh")
-                except (ValueError, RuntimeError, OSError, TypeError) as e:
-                    logger.error(f"create translation pipeline failed: {e}")
-                    raise RuntimeError(f"create translation pipeline failed: {e}") from e
+            # 使用稳定的通用任务名 "translation"，并显式传入 src_lang/tgt_lang，
+            # 以匹配 transformers 的类型签名（Literal["translation"], str, ...）
+            translator = pipeline("translation", model=model_path, src_lang="en", tgt_lang="zh")
 
             zh_captions: List[str] = []
             for i in range(0, len(captions), batch_size):

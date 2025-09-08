@@ -171,6 +171,23 @@
   },
 
   "media_processing": {
+    "chunking": {
+      "auto": true,
+      "defaults": { "chunk_size": 800, "overlap": 150 },
+      "by_media_type": {
+        "text": { "chunk_size": 800, "overlap": 120 },
+        "pdf": { "chunk_size": 900, "overlap": 180 },
+        "image": { "chunk_size": 300, "overlap": 80 },
+        "video": { "chunk_size": 1000, "overlap": 200 },
+        "audio": { "chunk_size": 1000, "overlap": 200 },
+        "code": { "chunk_size": 400, "overlap": 160 }
+      },
+      "targets": {
+        "target_tokens_per_chunk": 512,
+        "overlap_ratio": 0.15,
+        "max_context_tokens": 8192
+      }
+    },
     "image_captioning": {
       "enabled": true,
       "model": "D:/models/Salesforce/blip-image-captioning-base",
