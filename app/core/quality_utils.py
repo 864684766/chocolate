@@ -18,6 +18,12 @@ def normalize_caption(text: str) -> str:
     """标准化描述文本。
 
     - 去除 None 与首尾空白，保证后续规则判断不因空白造成误判。
+    
+    Args:
+        text (str): 需要标准化的原始文本，可以为 None 或空字符串
+        
+    Returns:
+        str: 标准化后的文本，去除首尾空白，None 转换为空字符串
     """
     return (text or "").strip()
 
@@ -25,8 +31,15 @@ def normalize_caption(text: str) -> str:
 def has_repeated_ngram(text: str, n: int = 3) -> bool:
     """检测是否存在重复的 n-gram 片段（字符级）。
 
-    - 典型用于识别“self self self”这类重复结构。
+    - 典型用于识别"self self self"这类重复结构。
     - 返回 True 表示存在重复。
+    
+    Args:
+        text (str): 需要检测的文本内容
+        n (int, optional): n-gram 的长度，默认为 3。例如 n=3 时检测 3 个字符的重复片段
+        
+    Returns:
+        bool: True 表示存在重复的 n-gram 片段，False 表示没有重复
     """
     tokens = list(text)
     seen: set = set()
@@ -37,22 +50,16 @@ def has_repeated_ngram(text: str, n: int = 3) -> bool:
         seen.add(ng)
     return False
 
-
-def repetition_ratio(text: str) -> float:
-    """计算重复率（0~1）。
-
-    - 粗略度量：唯一字符占比越低，重复率越高。
-    - 仅作为启发式阈值使用。
-    """
-    if not text:
-        return 0.0
-    total = len(text)
-    unique = len(set(text))
-    return max(0.0, 1.0 - unique / float(total))
-
-
 def contains_blacklisted(text: str, keywords: Iterable[str]) -> bool:
-    """检测是否包含黑名单关键词（大小写不敏感）。"""
+    """检测是否包含黑名单关键词（大小写不敏感）。
+    
+    Args:
+        text (str): 需要检测的文本内容
+        keywords (Iterable[str]): 黑名单关键词列表，可以是列表、集合等可迭代对象
+        
+    Returns:
+        bool: True 表示文本包含黑名单关键词，False 表示不包含
+    """
     if not text:
         return False
     lowered = text.lower()
@@ -66,26 +73,61 @@ _REGEX_URL = re.compile(r"https?://|www\\.", re.I)
 _REGEX_PHONE = re.compile(r"(\+?\d[\d\- ]{7,}\d)")
 _REGEX_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
-
 def hits_blacklist_regex(text: str) -> bool:
-    """是否命中常见广告/联系方式正则（网址/电话/邮箱）。"""
+    """是否命中常见广告/联系方式正则（网址/电话/邮箱）。
+    
+    Args:
+        text (str): 需要检测的文本内容
+        
+    Returns:
+        bool: True 表示文本包含网址、电话或邮箱等联系方式，False 表示不包含
+    """
     s = text or ""
     return bool(_REGEX_URL.search(s) or _REGEX_PHONE.search(s) or _REGEX_EMAIL.search(s))
 
-
 def gibberish_ratio(text: str) -> float:
-    """估算“乱码占比”（0~1）。
+    """估算"乱码占比"（0~1）。
 
     - 统计非字母数字/空白字符比例，比例越高越可疑。
+    
+    Args:
+        text (str): 需要计算乱码占比的文本内容
+        
+    Returns:
+        float: 乱码占比，范围 0.0-1.0。0.0 表示没有乱码，1.0 表示完全乱码
     """
     if not text:
         return 1.0
     valid = sum(ch.isalnum() or ch.isspace() for ch in text)
     return max(0.0, 1.0 - valid / float(len(text)))
 
+def repetition_ratio(text: str) -> float:
+    """计算重复率（0~1）。
+
+    - 粗略度量：唯一字符占比越低，重复率越高。
+    - 仅作为启发式阈值使用。
+
+    Args:
+        text (str): 需要计算重复率的文本内容
+
+    Returns:
+        float: 重复率，范围 0.0-1.0。0.0 表示没有重复，1.0 表示完全重复
+    """
+    if not text:
+        return 0.0
+    total = len(text)
+    unique = len(set(text))
+    return max(0.0, 1.0 - unique / float(total))
 
 def md5_of(text: str) -> str:
-    """计算文本的 MD5 哈希（用于精确去重）。"""
+    """计算文本的 MD5 哈希（用于精确去重）。
+    
+    Args:
+        text (str): 需要计算 MD5 哈希的文本内容
+        
+    Returns:
+        str: 文本的 MD5 哈希值，32 位十六进制字符串
+    """
     return hashlib.md5(text.encode("utf-8")).hexdigest()
 
 
@@ -94,6 +136,15 @@ def near_duplicate(c1: str, c2: str, threshold: float = 0.95, embed_model: Optio
 
     - 默认用多语言句向量模型计算相似度；相似度≥threshold 视为重复。
     - 依赖不可用时返回 False 并记录日志。
+    
+    Args:
+        c1 (str): 第一个文本内容
+        c2 (str): 第二个文本内容
+        threshold (float, optional): 相似度阈值，默认为 0.95。相似度大于等于此值视为重复
+        embed_model (Optional[str], optional): 嵌入模型名称，默认为多语言模型
+        
+    Returns:
+        bool: True 表示两个文本近似重复，False 表示不重复或检测失败
     """
     try:
         from sentence_transformers import SentenceTransformer, util
@@ -122,6 +173,17 @@ def filter_captions(
 
     - 长度阈值、黑名单（关键词/正则）、乱码占比、重复 n-gram。
     - 返回通过过滤的 caption 列表。
+    
+    Args:
+        captions (List[str]): 需要过滤的文本列表
+        min_len (int, optional): 最小长度阈值，默认为 5
+        max_len (int, optional): 最大长度阈值，默认为 120
+        blacklist_keywords (Optional[List[str]], optional): 黑名单关键词列表，默认为 None
+        max_gibberish_ratio (float, optional): 最大乱码占比阈值，默认为 0.3
+        forbid_repeat_ngram (int, optional): 禁止重复的 n-gram 长度，默认为 3。设为 0 表示不检查重复
+        
+    Returns:
+        List[str]: 通过所有过滤条件的文本列表
     """
     blacklist_keywords = blacklist_keywords or []
     kept: List[str] = []
@@ -152,6 +214,15 @@ def dedup_captions(
 
     - 精确去重：相同 MD5 只保留一条。
     - 近似去重：与已保留文本的相似度≥threshold 则丢弃。
+    
+    Args:
+        captions (List[str]): 需要去重的文本列表
+        approx (bool, optional): 是否启用近似去重，默认为 True
+        threshold (float, optional): 近似去重的相似度阈值，默认为 0.95
+        embed_model (Optional[str], optional): 嵌入模型名称，用于近似去重，默认为 None
+        
+    Returns:
+        List[str]: 去重后的文本列表，保持原有顺序
     """
     seen_hash: set = set()
     result: List[str] = []
@@ -171,6 +242,15 @@ def clip_rerank(image, captions: List[str], model_name: str, top_k: int = 2) -> 
 
     - 返回 [(caption, prob)]，按概率从高到低取前 top_k。
     - 依赖缺失或失败时返回原顺序的前 top_k，并给 0.0 分。
+    
+    Args:
+        image: 图像对象，可以是 PIL Image 或图像路径
+        captions (List[str]): 需要重排的文本描述列表
+        model_name (str): CLIP 模型名称，如 "openai/clip-vit-base-patch32"
+        top_k (int, optional): 返回前 k 个结果，默认为 2
+        
+    Returns:
+        List[Tuple[str, float]]: 重排后的结果列表，每个元素为 (文本描述, 相似度概率)
     """
     try:
         from transformers import CLIPProcessor, CLIPModel
@@ -197,6 +277,13 @@ def cross_encoder_rerank(pairs: List[Tuple[str, str]], model_name: str) -> List[
     - 输入：pairs = [(query, doc)]。
     - 输出：[(idx, score)]，按 score 降序排序的索引与分数。
     - 失败或依赖缺失时，返回 0 分占位，调用方可据此降级处理。
+    
+    Args:
+        pairs (List[Tuple[str, str]]): 查询-文档对列表，每个元素为 (查询文本, 文档文本)
+        model_name (str): 交叉编码器模型名称，如 "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        
+    Returns:
+        List[Tuple[int, float]]: 重排后的结果列表，每个元素为 (原始索引, 相关性分数)
     """
     try:
         from sentence_transformers import CrossEncoder

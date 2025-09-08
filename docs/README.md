@@ -21,3 +21,4 @@
   - FAQ：docs/faq.md
   - Claude Code 优化方案：docs/claude_code_optimization.md
   - 实施指南：docs/implementation_guide.md
+  - 去重策略详解：docs/deduplication_strategies.md
