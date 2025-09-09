@@ -131,18 +131,25 @@ def run_processing(samples: List[RawSample]) -> int:
 
 
 def process_and_vectorize(samples: List[RawSample]) -> Dict[str, int]:
-    """处理并占位向量化入口。
+    """处理并向量化入口。
 
-    用处：在文件上传后串联 Processing（已实现）与后续 Vectorization（待实现）。
-    Vectorization 部分将把 `ProcessedChunk.text` 编码为向量并写入向量库。
+    用处：在文件上传后串联 Processing 与 Vectorization 层；
+    将 `ProcessedChunk.text` 编码为向量并写入向量库。
 
     Args:
         samples (List[RawSample]): 标准化后的原始样本列表。
 
     Returns:
-        Dict[str, int]: {"chunks": 分块数量, "embedded": 已向量化数量(占位0)}。
+        Dict[str, int]: {"chunks": 分块数量, "embedded": 已向量化数量}。
     """
+    from app.rag.vectorization import VectorIndexer, VectorizationConfig
+
     pipeline = ProcessingPipeline()
     chunks = pipeline.run(samples)
-    # 占位：向量化层尚未实现，这里返回 0 以便接口兼容
-    return {"chunks": len(chunks), "embedded": 0}
+    if not chunks:
+        return {"chunks": 0, "embedded": 0}
+
+    cfg = VectorizationConfig.from_config_manager()
+    indexer = VectorIndexer(cfg)
+    embedded = indexer.index_chunks(chunks)
+    return {"chunks": len(chunks), "embedded": embedded}

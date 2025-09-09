@@ -38,7 +38,7 @@ app/rag/processing/
 
 为适配不同媒体与上下文窗口，已将"分块参数决策"独立为处理工具模块：`app/rag/processing/utils/chunking.py`。
 
-- 入口函数：`decide_chunk_params(media_type: str, content: Any, meta: dict) -> (chunk_size, overlap)`
+- 入口函数：`decide_chunk_params(media_type: str, content: Any) -> (chunk_size, overlap)`
 - 用途：基于配置与内容特征，输出稳健的 `chunk_size/overlap`；不直接做切块，便于被 `media_chunking` 的具体策略复用。
 - 支持媒体类型：`text/pdf/image/video/audio/code`（可扩展）
 - 工作方式：
@@ -85,7 +85,7 @@ app/rag/processing/
 ```python
 from app.rag.processing.utils.chunking import decide_chunk_params
 
-chunk_size, overlap = decide_chunk_params(str(media_type), content, meta)
+chunk_size, overlap = decide_chunk_params(str(media_type), content)
 strategy = ChunkingStrategyFactory.create_strategy(
     str(media_type),
     chunk_size=chunk_size,
@@ -290,7 +290,7 @@ media_type = "pdf"
 content = large_pdf_plain_text  # 经过提取后的可切分文本
 meta = {"language": "zh"}
 
-chunk_size, overlap = decide_chunk_params(media_type, content, meta)
+chunk_size, overlap = decide_chunk_params(media_type, content)
 # 然后将参数传入具体的 chunking 策略
 ```
 

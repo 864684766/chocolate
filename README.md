@@ -23,6 +23,7 @@
 - 数据接入层：[docs/rag/ingestion.md](docs/rag/ingestion.md)
 - 数据处理层（多语言/多媒体）：[docs/rag/processing.md](docs/rag/processing.md)
 - 向量化层（多语言嵌入）：[docs/rag/vectorization.md](docs/rag/vectorization.md)
+- 向量库工程化实践（ChromaDB）：[docs/rag/vector_store_practices.md](docs/rag/vector_store_practices.md)
 - 检索层（召回+重排，含语言路由）：[docs/rag/retrieval.md](docs/rag/retrieval.md)
 - 应用层（Gemini 集成）：[docs/rag/application.md](docs/rag/application.md)
 - 管理与运维：[docs/rag/management.md](docs/rag/management.md)

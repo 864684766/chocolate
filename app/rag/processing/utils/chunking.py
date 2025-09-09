@@ -5,7 +5,7 @@ from typing import Any, Dict, Tuple
 from app.config import get_config_manager
 
 
-def decide_chunk_params(media_type: str, content: Any, meta: Dict[str, Any]) -> Tuple[int, int]:
+def decide_chunk_params(media_type: str, content: Any) -> Tuple[int, int]:
     """决定分块参数。
 
     用处：综合配置与内容特征，产出 `chunk_size` 与 `overlap`，供上层流水线/策略使用。
@@ -13,7 +13,6 @@ def decide_chunk_params(media_type: str, content: Any, meta: Dict[str, Any]) -> 
     Args:
         media_type (str): 媒体类型（text/pdf/image/video/audio/code）。
         content (Any): 原始内容或其载荷，用于估算长度/密度。
-        meta (Dict[str, Any]): 上下文元信息，预留扩展（语言、版式等）。
 
     Returns:
         Tuple[int, int]: (chunk_size, overlap)，单位为近似 token 数（或字符近似）。

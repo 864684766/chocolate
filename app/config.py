@@ -119,8 +119,9 @@ class ConfigManager:
         return provider_config.get("models", {}).get(model, {})
 
     def get_vector_database_config(self) -> Dict[str, Any]:
-        """获取向量数据库的配置"""
-        return self._config_data.get("vector_database",{})
+        """获取向量数据库的配置（来自 vectorization.database）"""
+        vec = self._config_data.get("vectorization", {})
+        return vec.get("database", {})
 
     def get_media_processing_config(self) -> Dict[str, Any]:
         """获取媒体处理配置"""

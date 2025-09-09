@@ -7,7 +7,6 @@ from .media_text import PlainTextExtractor
 from .lang_zh import ChineseProcessor
 from .media_chunking import ChunkingStrategyFactory
 from .media_extractors import MediaExtractorFactory
-from app.config import get_config_manager
 from .utils.chunking import decide_chunk_params
 
 
@@ -83,7 +82,7 @@ class ProcessingPipeline:
         content = extracted.get("content", extracted.get("text", ""))
 
         # 计算分块参数：从核心 chunking 模块获取（可配置+自适应）
-        chunk_size, overlap = decide_chunk_params(str(media_type), content, meta)
+        chunk_size, overlap = decide_chunk_params(str(media_type), content)
 
         strategy = ChunkingStrategyFactory.create_strategy(
             str(media_type),

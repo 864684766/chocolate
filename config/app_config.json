@@ -34,18 +34,58 @@
     "description": "Agent执行器配置"
   },
 
-  "vector_database": {
-    "host": "124.71.135.104",
-    "port": 8000,
-    "storage": {
-      "type": "remote",
-      "path": "/data/chromadb",
-      "persistent": true
+  "vectorization": {
+    "model_name": "D:/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    "device": "auto",
+    "batch_size": 32,
+    "max_sequence_length": 512,
+    "max_retries": 3,
+    "retry_delay": 1.0,
+    "retry_backoff_factor": 2.0,
+    "collection_name": "documents",
+    "collection_metadata": {
+      "description": "文档向量集合",
+      "version": "1.0"
     },
-    "connection": {
-      "timeout": 30,
-      "retry_attempts": 3,
-      "pool_size": 10
+    "min_text_length": 10,
+    "max_text_length": 10000,
+    "skip_empty_text": true,
+    "max_workers": 4,
+    "metadata_whitelist": [
+      "doc_id",
+      "source",
+      "filename",
+      "content_type",
+      "media_type",
+      "chunk_index",
+      "chunk_type",
+      "chunk_size",
+      "created_at",
+      "page_number",
+      "start_pos",
+      "end_pos",
+      "region_index",
+      "ocr_engine",
+      "image_format",
+      "total_texts",
+      "min_x",
+      "max_x",
+      "min_y",
+      "max_y"
+    ],
+    "database": {
+      "host": "124.71.135.104",
+      "port": 8000,
+      "storage": {
+        "type": "remote",
+        "path": "/data/chromadb",
+        "persistent": true
+      },
+      "connection": {
+        "timeout": 30,
+        "retry_attempts": 3,
+        "pool_size": 10
+      }
     }
   },
 
