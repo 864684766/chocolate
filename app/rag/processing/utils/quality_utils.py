@@ -271,49 +271,4 @@ def clip_rerank(image, captions: List[str], model_name: str, top_k: int = 2) -> 
         return [(c, 0.0) for c in captions[: top_k]]
 
 
-def cross_encoder_rerank(pairs: List[Tuple[str, str]], model_name: str) -> List[Tuple[int, float]]:
-    """交叉编码器精排。
-
-    - 输入：pairs = [(query, doc)]。
-    - 输出：[(idx, score)]，按 score 降序排序的索引与分数。
-    - 失败或依赖缺失时，返回 0 分占位，调用方可据此降级处理。
-    
-    Args:
-        pairs (List[Tuple[str, str]]): 查询-文档对列表，每个元素为 (查询文本, 文档文本)
-        model_name (str): 交叉编码器模型名称，如 "cross-encoder/ms-marco-MiniLM-L-6-v2"
-        
-    Returns:
-        List[Tuple[int, float]]: 重排后的结果列表，每个元素为 (原始索引, 相关性分数)
-    """
-    try:
-        from sentence_transformers import CrossEncoder
-        ce = CrossEncoder(model_name)
-
-        # 核心修正点：确保 scores 是一个纯粹的浮点数列表/数组
-        # CrossEncoder.predict() 通常返回 numpy.ndarray (float)
-        # 如果模型内部逻辑导致返回类型不是纯浮点数列表，这里需要提取
-        raw_scores = ce.predict(pairs)
-
-        # 确认 raw_scores 是一个一维的浮点数序列
-        # 如果 raw_scores 的每个元素本身也是一个元组（例如 (idx, score)），
-        # 那么需要提取其中的分数部分。
-        # 这种情况通常不会发生，除非模型内部有特殊逻辑或用户传入了错误的pairs
-
-        # 这里假设 raw_scores 已经是 List[float] 或 numpy.ndarray
-        # 如果 raw_scores 出现异常结构（比如 [(score,), (score,), ...]），
-        # 下面 enumerate 后的 x[1] 就会是 (score,) 这样的元组，导致 TypeError
-
-        # 我们可以强制将分数转换为 float，并确保结构正确
-        processed_scores = [float(s) for s in raw_scores]  # 确保每个元素都是 float
-
-        ranked = sorted(list(enumerate(processed_scores)), key=lambda x: x[1], reverse=True)
-        return ranked
-    except (ImportError, ModuleNotFoundError) as e:
-        logger.info(f"CrossEncoder not available: {e}")
-        # 在这种情况下，返回的默认值也应该符合类型签名
-        return [(i, 0.0) for i, _ in enumerate(pairs)]
-    except Exception as e:
-        logger.warning(f"CrossEncoder rerank failed: {e}")
-        # 在这种情况下，返回的默认值也应该符合类型签名
-        return [(i, 0.0) for i, _ in enumerate(pairs)]
 

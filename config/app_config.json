@@ -195,14 +195,12 @@
         "num_captions": 3,
         "max_length": 50,
         "temperature": 0.7,
-        "do_sample": true,
-        "remove_duplicates": true
+        "do_sample": true
       },
       "filters": {
         "min_length": 5,
         "max_length": 120,
         "max_gibberish_ratio": 0.3,
-        "forbid_repeat_ngram": 3,
         "blacklist_keywords": ["优惠", "扫码", "购买", "VX"]
       },
       "rerank": {
@@ -210,12 +208,6 @@
         "model": "D:/models/openai/clip-vit-base-patch32",
         "top_k": 2,
         "min_clip_prob": 0.2
-      },
-      "cross_rerank": {
-        "enabled": false,
-        "model": "BAAI/bge-reranker-base",
-        "min_score": 0.5,
-        "top_k": 1
       },
       "embedding": {
         "enabled": true,
@@ -225,8 +217,13 @@
       "translation": {
         "enabled": true,
         "model": "D:/models/Helsinki-NLP/opus-mt-en-zh",
-        "backend": "hf_pipelines",
         "batch_size": 16
+      },
+      "deduplication": {
+        "approximate_enabled": true,
+        "similarity_threshold": 0.95,
+        "embed_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        "forbid_repeat_ngram": 3
       }
     },
     "ocr": {

@@ -121,14 +121,12 @@ strategy = ChunkingStrategyFactory.create_strategy(
         "num_captions": 1,
         "max_length": 50,
         "temperature": 0.7,
-        "do_sample": true,
-        "remove_duplicates": true
+        "do_sample": true
       },
       "filters": {
         "min_length": 5,
         "max_length": 120,
         "max_gibberish_ratio": 0.3,
-        "forbid_repeat_ngram": 3,
         "blacklist_keywords": ["优惠", "扫码", "购买", "VX"]
       },
       "rerank": {
@@ -136,12 +134,6 @@ strategy = ChunkingStrategyFactory.create_strategy(
         "model": "D:/models/openai/clip-vit-base-patch32",
         "top_k": 2,
         "min_clip_prob": 0.2
-      },
-      "cross_rerank": {
-        "enabled": false,
-        "model": "BAAI/bge-reranker-base",
-        "min_score": 0.5,
-        "top_k": 1
       },
       "embedding": {
         "enabled": true,
@@ -151,8 +143,13 @@ strategy = ChunkingStrategyFactory.create_strategy(
       "translation": {
         "enabled": true,
         "model": "D:/models/Helsinki-NLP/opus-mt-en-zh",
-        "backend": "hf_pipelines",
         "batch_size": 16
+      },
+      "deduplication": {
+        "approximate_enabled": true,
+        "similarity_threshold": 0.95,
+        "embed_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        "forbid_repeat_ngram": 3
       }
     }
   }
@@ -163,9 +160,6 @@ strategy = ChunkingStrategyFactory.create_strategy(
 
 - **enabled**: 是否启用图像描述功能
 - **model**: 使用的图像描述模型（单一模型，建议本地路径）
-- **backend**: 字幕后端选择，提升可读性与可控性
-  - `image-to-text`: 传统图像字幕管线（如 BLIP），忽略 prompt
-  - `qwen-chat`: 多模态对话模型（如 Qwen/qwen-chat），使用 prompt 作为指令
 - **prompt**: 描述生成提示词（完全由配置决定，可写中文或英文），例如：
   - 中文：`"请用中文简洁描述这张图片："`
   - 英文：`"Describe this image in concise English:"`
@@ -174,7 +168,6 @@ strategy = ChunkingStrategyFactory.create_strategy(
   - `max_length`: 描述的最大长度（默认：50）
   - `temperature`: 生成温度，控制随机性（默认：0.7）
   - `do_sample`: 是否使用采样（默认：true）
-  - `remove_duplicates`: 是否移除重复描述（默认：true）
 - **rerank**: 粗排配置（提高“图像 ↔ 文本”一致性）
 
   - `enabled`: 是否启用 CLIP 粗排
@@ -188,10 +181,23 @@ strategy = ChunkingStrategyFactory.create_strategy(
   - `dimension`: 向量维度（与所选模型一致，`paraphrase-multilingual-MiniLM-L12-v2` 为 384）
 
 - **translation**: EN→ZH 翻译配置（用于将英文描述稳定翻译为中文）
+
   - `enabled`: 是否启用翻译
   - `model`: 推荐 `Helsinki-NLP/opus-mt-en-zh`，支持本地路径
-  - `backend`: 目前使用 `hf_pipelines`
   - `batch_size`: 批量翻译时单批大小
+
+- **deduplication**: 翻译后去重配置（在中文内容上进行去重和质量检测）
+
+  - `approximate_enabled`: 是否启用近似去重（基于向量相似度，默认：true）
+  - `similarity_threshold`: 相似度阈值，超过此值认为是重复内容（默认：0.95）
+  - `embed_model`: 用于近似去重的嵌入模型（默认：sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2）
+  - `forbid_repeat_ngram`: 禁止重复的 n-gram 长度，用于检测单文本内部的重复片段（默认：3）
+
+- **filters**: 英文阶段过滤配置（仅用于英文内容的基础过滤）
+  - `min_length`: 最小长度阈值（默认：5）
+  - `max_length`: 最大长度阈值（默认：120）
+  - `max_gibberish_ratio`: 最大乱码占比（默认：0.3）
+  - `blacklist_keywords`: 黑名单关键词列表
 
 #### 4. 分块参数配置 (chunking)
 
@@ -291,7 +297,7 @@ chunk_size, overlap = decide_chunk_params(media_type, content, meta)
 #### 2. 控制输出风格/语言
 
 通过配置文件中的 `image_captioning.prompt` 控制，无需在代码中传 `meta`。运行时修改提示词需重载配置。
-当 `backend` 为 `image-to-text` 时，部分模型（如 BLIP）不支持指令，`prompt` 将被忽略；当 `backend` 为 `qwen-chat` 时，`prompt` 会作为文本指令参与生成。
+注意：当前实现使用 `image-to-text` 管线，部分模型（如 BLIP）不支持指令，`prompt` 将被忽略。
 
 #### 3. 模型与语言策略
 
@@ -302,7 +308,6 @@ chunk_size, overlap = decide_chunk_params(media_type, content, meta)
 #### 4. 后端依赖与建议
 
 - `image-to-text`: 依赖 `transformers`, `torch`, `pillow`
-- `qwen-chat`: 需较新 `transformers` 且开启 `trust_remote_code=True`，显卡上建议 bfloat16/float16 与 `device_map="auto"`
 
 #### 5. 控制生成数量
 
@@ -311,11 +316,29 @@ chunk_size, overlap = decide_chunk_params(media_type, content, meta)
 ```json
 {
   "generation": {
-    "num_captions": 3, // 生成3个描述
-    "remove_duplicates": true // 移除重复描述
+    "num_captions": 3 // 生成3个描述
   }
 }
 ```
+
+系统会在翻译后自动进行去重处理，无需手动配置。
+
+### 新的处理流程说明
+
+图像描述处理现在采用"翻译后统一去重"的策略：
+
+1. **英文生成阶段**：生成英文描述，仅进行基础过滤（长度、黑名单、乱码）
+2. **翻译阶段**：将英文描述翻译为中文
+3. **中文去重阶段**：在中文内容上进行：
+   - 重复片段检测（`forbid_repeat_ngram`）
+   - 精确去重（MD5）
+   - 近似去重（向量相似度）
+
+这种策略的优势：
+
+- **避免重复工作**：不在英文和中文上都做去重
+- **最终质量保证**：确保最终输出的中文内容质量
+- **逻辑一致性**：与翻译后去重的策略保持一致
 
 ## 当前处理阶段产物与下一步
 
@@ -341,9 +364,9 @@ chunk_size, overlap = decide_chunk_params(media_type, content, meta)
 
 #### Q: 为什么生成了重复的描述？
 
-A: 这是 BLIP 模型的正常行为。可以通过以下方式解决：
+A: 这是 BLIP 模型的正常行为。系统会在翻译后自动进行去重处理：
 
-1. 设置`remove_duplicates: true`（默认已启用）
+1. 翻译后的中文内容会进行精确去重和近似去重
 2. 调整`temperature`参数增加随机性
 3. 设置`num_captions: 1`只生成一个描述
 
