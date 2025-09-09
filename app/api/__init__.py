@@ -5,7 +5,7 @@
 from fastapi import FastAPI,Request
 from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
-from app.core.exceptions import register_exception_handlers
+from app.infra.exceptions.exceptions import register_exception_handlers
 from .health import router as health_router
 from .agent import router as agent_router
 from .ingestion import router as ingestion_router

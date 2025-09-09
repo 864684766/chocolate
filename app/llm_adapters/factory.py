@@ -1,7 +1,7 @@
 from typing import Any, Dict, Type, Optional, Tuple
 import logging
 from ..config import get_settings, Settings, get_config_manager
-from ..core.dict_helper import touch_cache_key, pop_lru_item
+from ..infra.cache.dict_helper import touch_cache_key, pop_lru_item
 
 
 class LLMProviderFactory:

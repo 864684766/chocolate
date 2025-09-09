@@ -9,7 +9,7 @@ import logging
 from typing import Dict, Any, List, Optional, Tuple
 from abc import ABC, abstractmethod
 from app.config import get_config_manager
-from app.core.quality_utils import (
+from .utils.quality_utils import (
     filter_captions,
     dedup_captions,
     clip_rerank,

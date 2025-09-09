@@ -1,7 +1,7 @@
 import chromadb
 from typing import Optional, Dict, Any, List, Literal
-from ...config import get_config_manager
-from ...core.exceptions import DatabaseConnectionError
+from ....config import get_config_manager
+from ....infra.exceptions.exceptions import DatabaseConnectionError
 
 # 定义允许的include字段类型
 # Literal 类型限制 include 参数只能是这些特定的字符串值

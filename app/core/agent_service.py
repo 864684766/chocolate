@@ -1,10 +1,10 @@
 from typing import Optional, Dict, Tuple
 
-from .dict_helper import touch_cache_key, pop_lru_item
+from ..infra.cache.dict_helper import touch_cache_key, pop_lru_item
 from ..agent import build_agent
 from langchain_core.runnables import RunnableWithMessageHistory, RunnableConfig
 
-from ..core.session_manager import get_session_history
+from ..infra.session.session_manager import get_session_history
 from ..config import get_config_manager
 
 

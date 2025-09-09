@@ -5,7 +5,7 @@ ChromaDBHelper 使用示例
 """
 
 from .db_helper import ChromaDBHelper, get_chroma_client
-from ...config import get_config_manager
+from ....config import get_config_manager
 
 
 def example_basic_usage():

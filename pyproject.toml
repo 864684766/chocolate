@@ -40,6 +40,7 @@ accelerate = "^1.10.1"
 optimum = "^1.27.0"
 sentencepiece = "^0.2.1"
 sacremoses = "^0.1.1"
+watchdog = "^6.0.0"
 
 
 [build-system]

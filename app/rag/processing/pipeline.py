@@ -8,7 +8,7 @@ from .lang_zh import ChineseProcessor
 from .media_chunking import ChunkingStrategyFactory
 from .media_extractors import MediaExtractorFactory
 from app.config import get_config_manager
-from app.core.chunking import decide_chunk_params
+from .utils.chunking import decide_chunk_params
 
 
 class ProcessingPipeline:
