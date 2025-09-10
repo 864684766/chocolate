@@ -5,11 +5,13 @@ from typing import Dict, List, Any
 from ..config import get_config_manager
 from ..llm_adapters.factory import LLMProviderFactory
 from ..core.agent_service import get_agent_service
+from .schemas import BaseResponse, ResponseCode, ResponseMessage
+from datetime import datetime
 
 router = APIRouter()
 
 
-class HealthResponse(BaseModel):
+class HealthData(BaseModel):
     status: str
     message: str
     ai_types: List[str]
@@ -19,7 +21,7 @@ class HealthResponse(BaseModel):
     cache_stats: Dict[str, Any]
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get("/health", response_model=BaseResponse)
 def health_check():
     """健康检查接口，返回系统状态和可用资源信息"""
     try:
@@ -57,24 +59,36 @@ def health_check():
             "chain_cache_usage": f"{len(cached_chains)}/5"
         }
         
-        return HealthResponse(
-            status="healthy",
-            message="系统运行正常",
-            ai_types=ai_types,
-            providers=providers,
-            cached_models=cached_models_info,
-            cached_chains=cached_chains_info,
-            cache_stats=cache_stats
+        return BaseResponse(
+            code=ResponseCode.OK,
+            message=ResponseMessage.SUCCESS,
+            data=HealthData(
+                status="healthy",
+                message="系统运行正常",
+                ai_types=ai_types,
+                providers=providers,
+                cached_models=cached_models_info,
+                cached_chains=cached_chains_info,
+                cache_stats=cache_stats
+            ).dict(),
+            request_id="",
+            timestamp=datetime.utcnow().isoformat() + "Z",
         )
     except Exception as e:
-        return HealthResponse(
-            status="unhealthy",
-            message=f"系统异常: {str(e)}",
-            ai_types=[],
-            providers=[],
-            cached_models={},
-            cached_chains={},
-            cache_stats={}
+        return BaseResponse(
+            code=ResponseCode.HEALTH_ERROR,
+            message=ResponseMessage.HEALTH_ERROR,
+            data=HealthData(
+                status="unhealthy",
+                message=f"系统异常: {str(e)}",
+                ai_types=[],
+                providers=[],
+                cached_models={},
+                cached_chains={},
+                cache_stats={},
+            ).dict(),
+            request_id="",
+            timestamp=datetime.utcnow().isoformat() + "Z",
         )
 
 
@@ -85,7 +99,7 @@ class CacheInfoResponse(BaseModel):
     chain_cache_keys: List[str]
 
 
-@router.get("/cache-info", response_model=CacheInfoResponse)
+@router.get("/cache-info", response_model=BaseResponse)
 def get_cache_info():
     """获取缓存信息"""
     # 获取模型缓存信息
@@ -97,15 +111,21 @@ def get_cache_info():
     cached_chains = agent_service.get_cached_chains()
     chain_cache_keys = [f"{ai_type}_{provider}" for (ai_type, provider) in cached_chains.keys()]
     
-    return CacheInfoResponse(
-        model_cache_count=len(cached_models),
-        chain_cache_count=len(cached_chains),
-        model_cache_keys=model_cache_keys,
-        chain_cache_keys=chain_cache_keys
+    return BaseResponse(
+        code=ResponseCode.OK,
+        message=ResponseMessage.SUCCESS,
+        data=CacheInfoResponse(
+            model_cache_count=len(cached_models),
+            chain_cache_count=len(cached_chains),
+            model_cache_keys=model_cache_keys,
+            chain_cache_keys=chain_cache_keys
+        ).dict(),
+        request_id="",
+        timestamp=datetime.utcnow().isoformat() + "Z",
     )
 
 
-@router.post("/clear-cache")
+@router.post("/clear-cache", response_model=BaseResponse)
 def clear_cache():
     """清除所有缓存"""
     try:
@@ -116,6 +136,18 @@ def clear_cache():
         agent_service = get_agent_service()
         agent_service.clear_cache()
         
-        return {"message": "缓存已清除", "status": "success"}
+        return BaseResponse(
+            code=ResponseCode.OK,
+            message=ResponseMessage.SUCCESS,
+            data={"message": "缓存已清除"},
+            request_id="",
+            timestamp=datetime.utcnow().isoformat() + "Z",
+        )
     except Exception as e:
-        return {"message": f"清除缓存失败: {str(e)}", "status": "error"}
+        return BaseResponse(
+            code=ResponseCode.BAD_REQUEST,
+            message=ResponseMessage.BAD_REQUEST,
+            data=None,
+            request_id="",
+            timestamp=datetime.utcnow().isoformat() + "Z",
+        )

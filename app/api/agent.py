@@ -9,6 +9,8 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from ..agent import build_agent
 from ..core.agent_service import initialize_agent_chain, get_runnable_config
 from ..config import get_config_manager
+from .schemas import BaseResponse, ResponseCode, ResponseMessage
+from datetime import datetime
 
 #
 router = APIRouter()
@@ -28,13 +30,13 @@ class InvokeRequest(BaseModel):
     provider:Optional[str]= None
     session_id: Optional[str] = None
 
-class InvokeResponse(BaseModel):
+class InvokeData(BaseModel):
     answer: str
 
 # 在模块级别获取一次 Agent 链实例，后续请求直接使用
 
 
-@router.post("/invoke", response_model=InvokeResponse)
+@router.post("/invoke", response_model=BaseResponse)
 def agent_invoke(req: InvokeRequest):
     try:
         # 配置会话ID（无则使用固定访客ID，仍然实现无状态）x
@@ -50,7 +52,13 @@ def agent_invoke(req: InvokeRequest):
 
         # AgentExecutor 默认返回 {"output": str}
         answer = result.get("output", result) if isinstance(result, dict) else str(result)
-        return InvokeResponse(answer=answer)
+        return BaseResponse(
+            code=ResponseCode.OK,
+            message=ResponseMessage.SUCCESS,
+            data=InvokeData(answer=answer).dict(),
+            request_id=runnable_config_obj.get("configurable", {}).get("session_id", ""),
+            timestamp=datetime.utcnow().isoformat() + "Z",
+        )
     except Exception as e:
         # 丰富错误返回，便于定位 Gemini Pro 空返回成因
         cfg = get_config_manager()
@@ -63,4 +71,10 @@ def agent_invoke(req: InvokeRequest):
             "generation_config": model_cfg.get("generation_config"),
             "safety": model_cfg.get("safety"),
         }
-        raise HTTPException(status_code=500, detail=detail)
+        return BaseResponse(
+            code=ResponseCode.UPSTREAM_ERROR,
+            message=ResponseMessage.UPSTREAM_ERROR,
+            data=detail,
+            request_id=runnable_config_obj.get("configurable", {}).get("session_id", "") if 'runnable_config_obj' in locals() else "",
+            timestamp=datetime.utcnow().isoformat() + "Z",
+        )

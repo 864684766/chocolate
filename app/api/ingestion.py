@@ -11,6 +11,8 @@ from app.rag.service.ingestion_helpers import (
     make_raw_sample_objects,
     process_and_vectorize,
 )
+from .schemas import BaseResponse, ResponseCode, ResponseMessage
+from datetime import datetime
 
 
 router = APIRouter()
@@ -31,6 +33,21 @@ async def upload_files(
     raw_list = run_manual_upload(items)
     samples = make_raw_sample_objects(raw_list)
     result = process_and_vectorize(samples)
-    return build_response(len(files), accepted, rejected, raw_list, dataset, result.get("chunks"))
+    # 仅返回与本接口强相关的字段，遵循 REST 语义
+    payload = {
+        "received": len(files),
+        "accepted": len(accepted),
+        "rejected": len(rejected),
+        "dataset": dataset,
+        "chunks": result.get("chunks", 0),
+        "embedded": result.get("embedded", 0),
+    }
+    return BaseResponse(
+        code=ResponseCode.OK,
+        message=ResponseMessage.SUCCESS,
+        data=payload,
+        request_id="",
+        timestamp=datetime.utcnow().isoformat() + "Z",
+    )
 
 
