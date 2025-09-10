@@ -138,31 +138,38 @@ class ContextCompressor:
 - 保持代码的完整性和调用链
 - 支持跨文件的依赖关系分析
 
-#### 3.2 智能检索路由
+#### 3.2 应用层智能路由（检索策略编排）
+
+说明：智能路由属于“应用层编排”的职责，负责选择使用哪种检索策略（向量/关键词/混合）以及参数（TopK、where 过滤、融合权重），而不直接执行底层检索。检索层只提供检索能力与融合算法（如向量检索、关键词检索、RRF/加权融合、重排、ContextBuilder）。
+
+应用层路由最小示意（仅做策略决策，实际检索由检索层执行）：
 
 ```python
-class HybridSearchEngine:
-    """混合搜索引擎"""
+class ApplicationRouter:
+    """应用层智能路由：选择检索策略与参数（不直接执行检索）"""
 
-    def __init__(self):
-        self.code_search = DirectCodeSearch()
-        self.vector_search = VectorSearch()
-        self.document_search = DocumentSearch()
-
-    async def search(self, query: str, context_type: str) -> SearchResult:
-        """根据查询类型选择最佳搜索策略"""
+    def decide(self, query: str, context_type: str) -> dict:
         if self._is_code_query(query):
-            return await self.code_search.search(query)
+            return {"mode": "keyword", "where": {"media_type": ["code"]}, "top_k": 8}
         elif self._is_document_query(query):
-            return await self.document_search.search(query)
+            return {"mode": "hybrid", "method": "rrf", "top_k": 8, "where": {"media_type": ["text","pdf"]}}
         else:
-            return await self.vector_search.search(query)
+            return {"mode": "vector", "top_k": 6}
 
     def _is_code_query(self, query: str) -> bool:
-        """判断是否为代码相关查询"""
         code_keywords = ['function', 'class', 'method', 'import', 'def', 'return']
-        return any(keyword in query.lower() for keyword in code_keywords)
+        return any(k in query.lower() for k in code_keywords)
+
+    def _is_document_query(self, query: str) -> bool:
+        doc_keywords = ['chapter', 'section', 'pdf', 'document']
+        return any(k in query.lower() for k in doc_keywords)
 ```
+
+执行路径（应用层 → 检索层）：
+
+- 应用层路由输出策略：`{ mode, where, top_k, method/weights }`
+- 检索层据此执行：`VectorRetriever/KeywordRetriever/HybridSearcher` → `ContextBuilder`
+- 应用层再将 `context_text + citations` 注入 Prompt，交由 LLM 生成答案。
 
 ### 4. 实时 Steering 机制
 
@@ -195,21 +202,21 @@ class StreamingResponseManager:
         self.flush_interval = 0.1  # 100ms
         self.active_streams = {}
 
-    async def create_stream(self, session_id: str) -> AsyncGenerator[str, None]:
-        """创建流式响应"""
-        stream = AsyncStream(session_id)
-        self.active_streams[session_id] = stream
+        async def create_stream(self, session_id: str) -> AsyncGenerator[str, None]:
+            """创建流式响应"""
+            stream = AsyncStream(session_id)
+            self.active_streams[session_id] = stream
 
-        try:
-            async for chunk in stream:
-                yield chunk
-        finally:
-            self.active_streams.pop(session_id, None)
+            try:
+                async for chunk in stream:
+                    yield chunk
+            finally:
+                self.active_streams.pop(session_id, None)
 
-    async def send_chunk(self, session_id: str, chunk: str):
-        """发送数据块"""
-        if session_id in self.active_streams:
-            await self.active_streams[session_id].send(chunk)
+        async def send_chunk(self, session_id: str, chunk: str):
+            """发送数据块"""
+            if session_id in self.active_streams:
+                await self.active_streams[session_id].send(chunk)
 ```
 
 ### 5. 分层工具执行系统
@@ -341,8 +348,8 @@ class ParallelProcessor:
    - 建立依赖关系追踪
 
 2. **混合检索策略**
-   - 实现智能检索路由
-   - 优化现有 RAG 系统
+   - 实现“应用层智能路由（选择检索策略与参数）”，检索层专注执行与融合
+   - 优化现有 RAG 系统（向量/关键词/融合/RRF/加权/ContextBuilder）
    - 性能对比测试
 
 ### 阶段三：实时性和工具优化（2-3 周）
@@ -367,6 +374,7 @@ class ParallelProcessor:
    - 性能监控和调优
 
 2. **全面测试**
+
    - 单元测试和集成测试
    - 性能基准测试
    - 用户体验测试
