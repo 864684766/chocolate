@@ -103,7 +103,7 @@
 
 ## 八、与当前代码的对齐
 
-- 写入集合：`config.app_config.json > vectorization.collection_name`
+- 写入集合：`config/app_config.json > vectorization.database.collection_name`
 - 元数据：`app/rag/vectorization/indexer.py` 的 `metadatas` 来源于 `ProcessedChunk.meta`，可在上游补充埋点键
 - 模型名：在向量化配置中记录；`indexer` 可将 `embed_model` 写入 `metadata`
 
@@ -114,10 +114,10 @@
 ```json
 {
   "vectorization": {
-    "collection_name": "documents_2025Q1",
     "database": {
       "host": "124.71.135.104",
-      "port": 8000
+      "port": 8000,
+      "collection_name": "documents_2025Q1"
     }
   }
 }

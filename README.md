@@ -264,6 +264,23 @@ logger.error("这是一条错误日志")
 }
 ```
 
+**参数说明**：
+
+- **logging.level**：全局日志级别阈值（DEBUG/INFO/WARNING/ERROR/CRITICAL）。低于该级别的日志会被丢弃。
+- **logging.format**：日志格式模板，占位符如`%(asctime)s`（时间）、`%(name)s`（日志器名）、`%(levelname)s`（级别）、`%(message)s`（消息）。
+- **logging.handlers.console.enabled**：是否启用控制台输出。
+- **logging.handlers.console.level**：控制台输出的最低级别（应不低于全局级别）。
+- **logging.handlers.file.enabled**：是否启用文件输出。
+- **logging.handlers.file.level**：文件输出的最低级别（通常设为 DEBUG 以便留存更多排障信息）。
+- **logging.handlers.file.filename**：基础日志文件名（如`logs/chocolate.log`）。当启用按日期轮转时，系统会自动追加日期生成当日文件，如`logs/chocolate_2025-09-10.log`。
+- **logging.handlers.file.use_daily_rotation**：是否启用“按日期轮转”。开启后每天午夜自动切换新文件，并按`backup_count`保留历史文件。
+- **logging.handlers.file.rotation_when**：日期轮转触发点，默认`midnight`。可选值还包括`S`/`M`/`H`/`D`/`W0`~`W6`（由 TimedRotatingFileHandler 解析）。
+- **logging.handlers.file.rotation_interval**：轮转间隔数值（与`rotation_when`配合使用）。例如按天轮转时写`1`表示每天生成新文件。
+- **logging.handlers.file.backup_count**：历史日志保留数量（天/份）。超出后自动删除最旧文件。
+- **logging.handlers.file.encoding**：日志文件编码（默认`utf-8`），避免中文乱码。
+- （仅在未启用按日期轮转时可用）**logging.handlers.file.max_bytes**：按大小轮转的单文件大小上限（字节），与`backup_count`配合使用。
+- （互斥说明）当`use_daily_rotation=true`时使用“按日期轮转”，忽略`max_bytes`；当`use_daily_rotation=false`时使用“按大小轮转”，此时可配置`max_bytes`与`backup_count`。
+
 **特性**：
 
 - **按日期轮转**：每天午夜自动创建新日志文件（如 `chocolate_2025-01-15.log`）

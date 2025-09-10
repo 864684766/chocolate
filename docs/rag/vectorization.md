@@ -19,7 +19,7 @@ app/rag/vectorization/
 流程：
 
 - `chunks = ProcessingPipeline().run(samples)` 得到 `List[ProcessedChunk]`
-- `VectorIndexer(cfg).index_chunks(chunks)` 生成向量并写入集合 `cfg.collection_name`
+- `VectorIndexer(cfg).index_chunks(chunks)` 生成向量并写入集合 `cfg.collection_name`（其值来自 `vectorization.database.collection_name`）
 
 ## 配置（app_config.json）
 
@@ -31,7 +31,6 @@ app/rag/vectorization/
     "model_name": "D:/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     "device": "auto",
     "batch_size": 32,
-    "collection_name": "documents",
     "metadata_whitelist": [
       "doc_id",
       "source",
@@ -56,7 +55,8 @@ app/rag/vectorization/
     ],
     "database": {
       "host": "124.71.135.104",
-      "port": 8000
+      "port": 8000,
+      "collection_name": "documents"
     }
   }
 }
@@ -91,17 +91,13 @@ app/rag/vectorization/
       - 有显卡：可以设更大（如 128）
     - **常见问题**：设太大电脑会卡死，设太小处理很慢
 
-- 集合与存储（决定"存到哪"）
-
-  - `collection_name`
-    - **它是什么**：给向量数据库起个"文件夹名"
-    - **形象比喻**：就像给文件分类，`documents` 表示"文档集合"
-    - **命名建议**：加上时间或版本，如 `documents_2025Q1`、`images_v2`
-    - **为什么重要**：不同时期的数据分开存储，便于管理和升级
-
 - 数据库（决定"如何连接与存储到 ChromaDB"）
 
   - `database.host` / `database.port`
+  - `database.collection_name`
+    - **它是什么**：向量数据库集合名（更合理地放到 database 下，表示“属于数据库配置的一部分”）
+    - **命名建议**：加上时间或版本，如 `documents_2025Q1`、`images_v2`
+    - **注意**：更换模型时建议使用新集合，避免维度或语义不兼容
     - **它是什么**：向量数据库的"地址和门牌号"
     - **形象比喻**：就像寄快递，需要知道收件人的地址和门牌号
     - **本地 vs 远程**：

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from app.config import get_config_manager
 
 
@@ -16,21 +16,26 @@ class VectorizationConfig:
     device: str = "auto"
     batch_size: int = 32
 
-    # 集合
-    collection_name: str = "documents"
-
     # 数据库
     database: Dict[str, Any] = None
 
     @classmethod
     def from_config_manager(cls) -> "VectorizationConfig":
         cfg = get_config_manager().get_config().get("vectorization", {})
-        return cls(
+        instance = cls(
             model_name=cfg.get("model_name", cls.model_name),
             device=cfg.get("device", cls.device),
             batch_size=cfg.get("batch_size", cls.batch_size),
-            collection_name=cfg.get("collection_name", cls.collection_name),
             database=cfg.get("database", {}),
         )
+
+        # 仅从 database.collection_name 读取集合名（不再回落旧路径）
+        db = instance.database or {}
+        collection_name = db.get("collection_name")
+        if not collection_name:
+            raise ValueError("vectorization.database.collection_name 未配置")
+        # 动态设置为实例属性，保持下游 self.config.collection_name 可用
+        setattr(instance, "collection_name", collection_name)
+        return instance
 
 
