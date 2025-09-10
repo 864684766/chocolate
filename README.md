@@ -24,7 +24,7 @@
 - 数据处理层（多语言/多媒体）：[docs/rag/processing.md](docs/rag/processing.md)
 - 向量化层（多语言嵌入）：[docs/rag/vectorization.md](docs/rag/vectorization.md)
 - 向量库工程化实践（ChromaDB）：[docs/rag/vector_store_practices.md](docs/rag/vector_store_practices.md)
-- 检索层（召回+重排，含语言路由）：[docs/rag/retrieval.md](docs/rag/retrieval.md)
+- 检索层（召回+重排，含语言路由、复用应用层分词器做预算）：[docs/rag/retrieval.md](docs/rag/retrieval.md)
 - 应用层（Gemini 集成）：[docs/rag/application.md](docs/rag/application.md)
 - 管理与运维：[docs/rag/management.md](docs/rag/management.md)
 - 设计模式与原则：[docs/rag/patterns.md](docs/rag/patterns.md)
@@ -62,6 +62,8 @@ app/
 │   │   ├── __init__.py
 │   │   ├── config.py             # 日志配置管理器
 │   │   └── example.py            # 日志使用示例
+│   ├── tokenization/       # 分词计数（复用应用层模型配置）
+│   │   └── provider.py           # TokenCounter：openai→tiktoken；hf→AutoTokenizer
 │   └── __init__.py
 ├── rag/                    # RAG相关功能
 │   ├── data_ingestion/     # 数据接入层
@@ -98,6 +100,12 @@ app/
 │   │   └── ...
 │   └── service/            # RAG服务层
 │       └── ingestion_helpers.py # 接入辅助函数
+│   ├── retrieval/          # 检索层
+│   │   ├── __init__.py
+│   │   ├── schemas.py             # 数据模型
+│   │   ├── retriever.py           # 向量/关键词检索
+│   │   ├── hybrid.py              # 融合（RRF/加权）
+│   │   └── context_builder.py     # 上下文拼接（真实 token 预算）
 ├── api/                    # API接口层
 │   ├── __init__.py         # FastAPI应用创建
 │   ├── agent.py            # Agent对话接口
