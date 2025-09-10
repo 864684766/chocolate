@@ -58,6 +58,10 @@ app/
 │   │   ├── audit.py              # 审计日志与操作记录
 │   │   ├── healthchecks.py       # 系统健康检查
 │   │   └── __init__.py
+│   ├── logging/            # 日志配置
+│   │   ├── __init__.py
+│   │   ├── config.py             # 日志配置管理器
+│   │   └── example.py            # 日志使用示例
 │   └── __init__.py
 ├── rag/                    # RAG相关功能
 │   ├── data_ingestion/     # 数据接入层
@@ -69,12 +73,26 @@ app/
 │   │   │   ├── chunking.py       # 分块参数决策
 │   │   │   ├── quality_utils.py  # 质量检测与去重
 │   │   │   └── __init__.py
+│   │   ├── media/          # 媒体处理模块
+│   │   │   ├── chunking/         # 媒体分块策略
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── base.py       # 分块策略基类
+│   │   │   │   ├── factory.py    # 分块策略工厂
+│   │   │   │   ├── text.py       # 文本分块策略
+│   │   │   │   ├── pdf.py        # PDF分块策略
+│   │   │   │   ├── image.py      # 图像分块策略
+│   │   │   │   └── video.py      # 视频分块策略
+│   │   │   └── extractors/       # 媒体内容提取器
+│   │   │       ├── __init__.py
+│   │   │       ├── base.py       # 提取器基类
+│   │   │       ├── factory.py    # 提取器工厂
+│   │   │       ├── image_vision.py # 图像视觉理解提取器
+│   │   │       ├── image_ocr.py  # 图像OCR提取器
+│   │   │       └── video.py      # 视频内容提取器
 │   │   ├── interfaces.py   # 接口定义
 │   │   ├── pipeline.py     # 处理流水线
 │   │   ├── media_text.py   # 文本处理
 │   │   ├── media_markdown.py # Markdown处理
-│   │   ├── media_extractors.py # 媒体内容提取
-│   │   ├── media_chunking.py # 媒体分块策略
 │   │   ├── lang_zh.py      # 中文处理器
 │   │   ├── quality_checker.py # 质量评估
 │   │   └── ...
@@ -205,5 +223,53 @@ def on_config_change(new_config):
 
 config_watcher.add_callback(on_config_change)
 ```
+
+### 4. 日志系统
+
+全局日志配置，支持控制台和文件输出：
+
+```python
+# 在代码中使用日志
+from app.infra.logging import get_logger
+
+logger = get_logger(__name__)
+logger.info("这是一条日志信息")
+logger.error("这是一条错误日志")
+```
+
+**日志配置**（在 `app_config.json` 中）：
+
+```json
+{
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "handlers": {
+      "console": {
+        "enabled": true,
+        "level": "INFO"
+      },
+      "file": {
+        "enabled": true,
+        "level": "DEBUG",
+        "filename": "logs/chocolate.log",
+        "use_daily_rotation": true,
+        "rotation_when": "midnight",
+        "rotation_interval": 1,
+        "backup_count": 30,
+        "encoding": "utf-8"
+      }
+    }
+  }
+}
+```
+
+**特性**：
+
+- **按日期轮转**：每天午夜自动创建新日志文件（如 `chocolate_2025-01-15.log`）
+- **保留历史**：保留最近 30 天的日志文件
+- **双重输出**：控制台和文件同时输出
+- **第三方库控制**：自动设置第三方库日志级别为 WARNING
+- **灵活配置**：支持按日期或按大小轮转两种模式
 
 欢迎根据业务需要进行裁剪与扩展。

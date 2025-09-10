@@ -6,12 +6,16 @@ from fastapi import FastAPI,Request
 from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
 from app.infra.exceptions.exceptions import register_exception_handlers
+from app.infra.logging import setup_logging
 from .health import router as health_router
 from .agent import router as agent_router
 from .ingestion import router as ingestion_router
 
 def create_app() -> FastAPI:
     """创建并配置 FastAPI 应用。"""
+    # 确保日志系统已初始化
+    setup_logging()
+    
     app = FastAPI(
         title="Chocolate Agent API",
         version="0.1.0",

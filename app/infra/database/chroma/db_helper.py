@@ -2,6 +2,7 @@ import chromadb
 from typing import Optional, Dict, Any, List, Literal
 from ....config import get_config_manager
 from ....infra.exceptions.exceptions import DatabaseConnectionError
+from ....infra.logging import get_logger
 
 # 定义允许的include字段类型
 # Literal 类型限制 include 参数只能是这些特定的字符串值
@@ -28,6 +29,7 @@ class ChromaDBHelper:
         self.config_manager = config_manager or get_config_manager()
         self._client: Optional[chromadb.ClientAPI] = None
         self._collections_cache: Dict[str, chromadb.Collection] = {}
+        self.logger = get_logger(__name__)
         
     def _get_connection_config(self) -> Dict[str, Any]:
         """获取数据库连接配置
@@ -59,10 +61,13 @@ class ChromaDBHelper:
             DatabaseConnectionError: 连接失败时抛出
         """
         if self._client is not None:
+            self.logger.debug("使用已存在的ChromaDB连接")
             return self._client
             
         try:
             config = self._get_connection_config()
+            self.logger.info(f"正在连接ChromaDB: {config['host']}:{config['port']}")
+            
             self._client = chromadb.HttpClient(
                 host=config["host"], 
                 port=config["port"]
@@ -70,9 +75,11 @@ class ChromaDBHelper:
             
             # 验证连接
             self._client.heartbeat()
+            self.logger.info("ChromaDB连接成功")
             return self._client
             
         except Exception as e:
+            self.logger.error(f"ChromaDB连接失败: {str(e)}")
             raise DatabaseConnectionError(
                 f"无法连接到 ChromaDB: {str(e)}"
             ) from e
@@ -105,20 +112,25 @@ class ChromaDBHelper:
             DatabaseConnectionError: 操作失败时抛出
         """
         if name in self._collections_cache:
+            self.logger.debug(f"使用缓存的集合: {name}")
             return self._collections_cache[name]
             
         try:
+            self.logger.info(f"获取集合 '{name}', create_if_not_exists={create_if_not_exists}")
             client = self.get_client()
             
             if create_if_not_exists:
                 collection = client.get_or_create_collection(name=name)
+                self.logger.info(f"获取或创建集合 '{name}' 成功")
             else:
                 collection = client.get_collection(name=name)
+                self.logger.info(f"获取集合 '{name}' 成功")
                 
             self._collections_cache[name] = collection
             return collection
             
         except Exception as e:
+            self.logger.error(f"获取集合 '{name}' 失败: {str(e)}")
             raise DatabaseConnectionError(
                 f"获取集合 '{name}' 失败: {str(e)}"
             ) from e
@@ -188,6 +200,16 @@ class ChromaDBHelper:
             DatabaseConnectionError: 操作失败时抛出
         """
         try:
+            # 记录操作信息
+            doc_count = len(documents) if documents else 0
+            embedding_count = len(embeddings) if embeddings else 0
+            metadata_count = len(metadatas) if metadatas else 0
+            id_count = len(ids) if ids else 0
+            
+            self.logger.info(f"开始向集合 '{collection_name}' 添加数据: "
+                           f"文档数={doc_count}, 向量数={embedding_count}, "
+                           f"元数据数={metadata_count}, ID数={id_count}")
+            
             collection = self.get_collection(collection_name)
             collection.add(
                 documents=documents,
@@ -196,7 +218,11 @@ class ChromaDBHelper:
                 ids=ids,
                 **kwargs
             )
+            
+            self.logger.info(f"成功向集合 '{collection_name}' 添加 {doc_count} 条数据")
+            
         except Exception as e:
+            self.logger.error(f"向集合 '{collection_name}' 添加数据失败: {str(e)}")
             raise DatabaseConnectionError(
                 f"向集合 '{collection_name}' 添加数据失败: {str(e)}"
             ) from e

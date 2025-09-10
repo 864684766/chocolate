@@ -115,7 +115,10 @@
 {
   "vectorization": {
     "collection_name": "documents_2025Q1",
-    "database": { "storage": { "persistent": true } }
+    "database": {
+      "host": "124.71.135.104",
+      "port": 8000
+    }
   }
 }
 ```

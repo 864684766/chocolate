@@ -139,6 +139,10 @@ class ConfigManager:
         """获取视频处理配置"""
         return self.get_media_processing_config().get("video_processing", {})
 
+    def get_logging_config(self) -> Dict[str, Any]:
+        """获取日志配置"""
+        return self._config_data.get("logging", {})
+
     def _find_model_by_alias(self, alias: str) -> Optional[Tuple[str, str]]:
         """通过别名查找提供商和模型"""
         providers = self._config_data.get("providers", {})

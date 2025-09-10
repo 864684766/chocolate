@@ -31,25 +31,32 @@ app/rag/vectorization/
     "model_name": "D:/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     "device": "auto",
     "batch_size": 32,
-    "max_sequence_length": 512,
-    "max_retries": 3,
-    "retry_delay": 1.0,
-    "retry_backoff_factor": 2.0,
-    "collection_name": "documents_2025Q1",
-    "collection_metadata": { "description": "文档向量集合", "version": "1.0" },
-    "min_text_length": 10,
-    "max_text_length": 10000,
-    "skip_empty_text": true,
-    "max_workers": 4,
+    "collection_name": "documents",
+    "metadata_whitelist": [
+      "doc_id",
+      "source",
+      "filename",
+      "content_type",
+      "media_type",
+      "chunk_index",
+      "chunk_type",
+      "chunk_size",
+      "created_at",
+      "page_number",
+      "start_pos",
+      "end_pos",
+      "region_index",
+      "ocr_engine",
+      "image_format",
+      "total_texts",
+      "min_x",
+      "max_x",
+      "min_y",
+      "max_y"
+    ],
     "database": {
       "host": "124.71.135.104",
-      "port": 8000,
-      "storage": {
-        "type": "remote",
-        "path": "/data/chromadb",
-        "persistent": true
-      },
-      "connection": { "timeout": 30, "retry_attempts": 3, "pool_size": 10 }
+      "port": 8000
     }
   }
 }
@@ -57,67 +64,49 @@ app/rag/vectorization/
 
 参数说明（面向初学者，逐项解释）：
 
-- 模型与批处理（决定“如何把文本变成向量”）
+- 模型与批处理（决定"如何把文本变成向量"）
 
   - `model_name`
-    - 它是什么：使用的嵌入模型名或本地模型路径。
-    - 推荐：多语言模型，便于同时处理中英文（例如 `paraphrase-multilingual-MiniLM-L12-v2`）。
-    - 何时需要改：想提升中文/多语言效果，或改为离线本地模型时。
-    - 常见坑：不同模型的“向量维度”可能不同，切换模型建议写入“新集合”。
+    - **它是什么**：告诉系统用哪个"翻译器"把文字变成数字向量
+    - **形象比喻**：就像选择不同的"翻译官"，有的擅长中文，有的擅长英文
+    - **推荐选择**：`paraphrase-multilingual-MiniLM-L12-v2`（多语言专家，中英文都行）
+    - **本地 vs 在线**：
+      - 本地路径（如 `D:/models/...`）：从你电脑加载，速度快但占用空间
+      - 在线名称（如 `sentence-transformers/...`）：从网上下载，首次慢但省空间
+    - **重要提醒**：换模型就像换翻译官，之前的数据可能不兼容，建议用新集合
   - `device`
-    - 它是什么：计算设备，`auto`/`cpu`/`cuda`（GPU）。
-    - 建议：有 GPU 则用 `cuda`；否则 `auto` 即可。
-    - 影响：GPU 通常更快；CPU 更通用但较慢。
+    - **它是什么**：选择用哪个"计算器"来算向量
+    - **选项说明**：
+      - `auto`：自动选择最好的（推荐）
+      - `cpu`：用电脑的中央处理器（慢但稳定）
+      - `cuda`：用显卡（快但需要 NVIDIA 显卡）
+      - `mps`：用苹果芯片（Mac 用户）
+    - **速度对比**：显卡 > 苹果芯片 > CPU（大概快 5-10 倍）
   - `batch_size`
-    - 它是什么：一次送入模型的文本条数（批大小）。
-    - 如何取值：32 起步，根据显存/内存增减。
-    - 常见坑：过大容易 OOM（内存/显存溢出）；过小吞吐低。
-  - `max_sequence_length`
-    - 它是什么：单条文本允许的最大长度（超过可能截断/丢弃）。
-    - 作用：限制超长文本，防止极端样本拖慢/卡死。
-  - `max_retries` / `retry_delay` / `retry_backoff_factor`
-    - 它是什么：失败重试（次数/初始间隔/指数回退因子）。
-    - 何时需要改：网络不稳或偶发模型错误时适度增大以提高稳定性。
+    - **它是什么**：一次处理多少条文本
+    - **形象比喻**：就像工厂流水线，一次处理 32 个产品 vs 一次处理 1 个
+    - **如何选择**：
+      - 电脑内存大：可以设 64 或 128（更快）
+      - 电脑内存小：设 16 或 32（更稳定）
+      - 有显卡：可以设更大（如 128）
+    - **常见问题**：设太大电脑会卡死，设太小处理很慢
 
-- 集合与质量（决定“存到哪、哪些文本能入库”）
+- 集合与存储（决定"存到哪"）
 
   - `collection_name`
-    - 它是什么：向量写入的集合名（类似“表名”）。
-    - 建议：带时间或版本号，如 `documents_2025Q1`，便于后续扩容/迁移。
-  - `collection_metadata`
-    - 它是什么：集合级元信息（说明/版本）。
-    - 用处：团队协作与排查问题时可查看集合背景。
-  - `min_text_length` / `max_text_length`
-    - 它是什么：允许写入的文本长度范围。
-    - 作用：过滤过短的噪声文本和异常超长文本，保证质量与性能。
-  - `skip_empty_text`
-    - 它是什么：是否跳过空字符串。
-    - 建议：保持 `true`，避免生成无意义向量。
-  - `max_workers`
-    - 它是什么：并发工作线程数（应用层并发）。
-    - 建议：根据机器 CPU/IO 能力调整；越大越快，但占用更多资源。
+    - **它是什么**：给向量数据库起个"文件夹名"
+    - **形象比喻**：就像给文件分类，`documents` 表示"文档集合"
+    - **命名建议**：加上时间或版本，如 `documents_2025Q1`、`images_v2`
+    - **为什么重要**：不同时期的数据分开存储，便于管理和升级
 
-- 数据库（决定“如何连接与存储到 ChromaDB”）
+- 数据库（决定"如何连接与存储到 ChromaDB"）
 
   - `database.host` / `database.port`
-    - 它是什么：ChromaDB 服务的地址与端口。
-    - 何时需要改：远程部署或端口变更时。
-  - `database.storage.type`
-    - 它是什么：存储类型（如 `remote`/`local`）。
-    - 影响：决定数据落地方式与路径行为。
-  - `database.storage.path`
-    - 它是什么：数据文件存放路径（仅本地/持久化相关）。
-  - `database.storage.persistent`
-    - 它是什么：是否持久化（`true` 推荐）。
-    - 影响：`false` 可能导致重启后数据丢失。
-  - `database.connection.timeout`
-    - 它是什么：连接超时（秒）。超时会报错并触发重试。
-  - `database.connection.retry_attempts`
-    - 它是什么：连接失败的重试次数。
-  - `database.connection.pool_size`
-    - 它是什么：连接池大小（并发能力）。
-    - 提示：过小会排队变慢；过大可能占用过多资源。
-  - 说明：索引与底层 ANN 由 Chroma 负责；集合不存在会在首次写入时自动创建。
+    - **它是什么**：向量数据库的"地址和门牌号"
+    - **形象比喻**：就像寄快递，需要知道收件人的地址和门牌号
+    - **本地 vs 远程**：
+      - 本地：`host: "localhost"`（就在你电脑上）
+      - 远程：`host: "124.71.135.104"`（在别的服务器上）
 
 - 元数据白名单（用于 where 过滤）
   - `metadata_whitelist`：控制哪些字段会写入向量库的 metadatas，必须全部是基础类型。
@@ -140,11 +129,108 @@ result = process_and_vectorize(samples)
 # result = {"chunks": 分块数, "embedded": 已入库向量数}
 ```
 
-## 真实嵌入实现（说明）
+## 初学者概念解释
 
-当前 `embedder.py` 为“占位实现”（返回简化向量以打通流程）。
-上线前应替换为 sentence-transformers：
+### 什么是向量化？
 
-- 加载：`SentenceTransformer(config.model_name, device=config.device)`
-- 批量编码：`model.encode(texts, batch_size=config.batch_size, normalize_embeddings=True)`
-- 并行：必要时在应用层做分片/线程池，并合并结果
+**简单理解**：把文字变成数字，让电脑能"理解"文字的意思。
+
+**具体例子**：
+
+- 输入：`"我喜欢吃苹果"`
+- 输出：`[0.1, 0.3, -0.2, 0.8, ...]`（384 个数字组成的向量）
+
+**为什么需要向量化**？
+
+- 电脑只能处理数字，不能直接理解文字
+- 相似的文字会产生相似的向量
+- 通过比较向量，就能找到相似的内容
+
+### L2 归一化是什么？
+
+**简单理解**：把向量"标准化"，让所有向量的长度都变成 1。
+
+**具体例子**：
+
+- 原始向量：`[3, 4]`（长度 = 5）
+- 归一化后：`[0.6, 0.8]`（长度 = 1）
+
+**为什么要归一化**？
+
+- 在搜索时，我们只关心向量的"方向"，不关心"长度"
+- 归一化后，相似的内容向量方向更接近，搜索更准确
+- 就像比较两个人的"性格方向"，而不是"性格强度"
+
+### numpy 数组是什么？
+
+**简单理解**：numpy 是 Python 中处理数字的"超级计算器"。
+
+**具体例子**：
+
+```python
+# 普通 Python 列表（慢）
+normal_list = [1, 2, 3, 4]
+
+# numpy 数组（快）
+import numpy as np
+numpy_array = np.array([1, 2, 3, 4])
+```
+
+**为什么用 numpy**？
+
+- 向量计算需要大量数学运算
+- numpy 比普通 Python 快几十倍
+- 就像用计算器 vs 用笔算的区别
+
+### get_model_info 的 status 字段
+
+**它是什么**：告诉 you 模型是否已经准备好使用
+
+**可能的值**：
+
+- `"loaded"`：模型已成功加载，可以正常使用
+- `"not_loaded"`：模型未加载，可能出错或正在加载中
+
+**用途**：检查模型状态，确保向量化功能正常
+
+## 真实嵌入实现
+
+`embedder.py` 已实现基于 sentence-transformers 的真实向量化：
+
+### 核心功能
+
+- **模型加载**：自动加载配置指定的 sentence-transformers 模型
+- **设备选择**：支持 `auto`/`cpu`/`cuda`/`mps`（Apple Silicon）
+- **批量编码**：使用配置的 `batch_size` 进行高效批量处理
+- **向量归一化**：自动进行 L2 归一化，提升检索效果
+- **错误处理**：完善的异常处理和日志记录
+
+### 使用示例
+
+```python
+from app.rag.vectorization import VectorizationConfig, Embedder
+
+# 从配置创建
+config = VectorizationConfig.from_config_manager()
+embedder = Embedder(config)
+
+# 编码文本
+texts = ["这是第一段文本", "这是第二段文本"]
+vectors = embedder.encode(texts)
+print(f"向量维度: {len(vectors[0])}")  # 例如: 384
+
+# 获取模型信息
+info = embedder.get_model_info()
+print(info)  # 包含模型名、维度、设备等信息
+
+# status 字段的作用：
+# - "loaded": 模型已成功加载，可以正常使用
+# - "not_loaded": 模型未加载，可能出错或正在加载中
+# 用途：检查模型状态，确保向量化功能正常
+```
+
+### 性能优化
+
+- **批处理**：通过 `batch_size` 控制内存使用和速度平衡
+- **设备选择**：GPU 加速（如有 CUDA），CPU 兼容性
+- **模型缓存**：首次下载后自动缓存，后续启动更快

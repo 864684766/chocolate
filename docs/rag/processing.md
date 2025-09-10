@@ -135,11 +135,6 @@ strategy = ChunkingStrategyFactory.create_strategy(
         "top_k": 2,
         "min_clip_prob": 0.2
       },
-      "embedding": {
-        "enabled": true,
-        "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        "dimension": 384
-      },
       "translation": {
         "enabled": true,
         "model": "D:/models/Helsinki-NLP/opus-mt-en-zh",
@@ -173,12 +168,6 @@ strategy = ChunkingStrategyFactory.create_strategy(
   - `enabled`: 是否启用 CLIP 粗排
   - `model`: CLIP 模型（默认示例：`openai/clip-vit-base-patch32`，可指向本地路径）
   - `top_k`: 粗排后保留的候选数
-
-- **embedding**: 嵌入向量配置
-
-  - `enabled`: 是否生成嵌入向量（默认：true）
-  - `model`: 推荐 `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`（多语言效果更稳）。注意：代码中的“默认回退值”为 `clip-ViT-B-32`，仅在配置缺失时作为兜底；若你在 `app_config.json` 指定了 `sentence-transformers/...`，则实际以配置为准。
-  - `dimension`: 向量维度（与所选模型一致，`paraphrase-multilingual-MiniLM-L12-v2` 为 384）
 
 - **translation**: EN→ZH 翻译配置（用于将英文描述稳定翻译为中文）
 
@@ -397,9 +386,6 @@ A: 在配置文件中设置相应的`enabled`参数为`false`：
 {
   "image_captioning": {
     "enabled": false // 禁用图像描述
-  },
-  "embedding": {
-    "enabled": false // 禁用嵌入向量生成
   }
 }
 ```
