@@ -8,6 +8,7 @@ from .lang_zh import ChineseProcessor
 from .media.chunking import ChunkingStrategyFactory
 from .media.extractors import MediaExtractorFactory
 from .utils.chunking import decide_chunk_params
+from app.rag.vectorization.metadata_utils import normalize_meta_for_vector
 
 
 class ProcessingPipeline:
@@ -115,8 +116,8 @@ class ProcessingPipeline:
         chunks: List[ProcessedChunk] = []
         for idx, part in enumerate(parts):
             meta: Dict[str, Any] = dict(extracted["meta"])  # type: ignore[index]
-            meta["chunk_index"] = idx
-            meta["chunk_type"] = "text_traditional"
+            # 写事实字段（不再归一化；最终由 Indexer 的 build_metadata_from_meta 兜底）
+            meta = {**meta, "chunk_index": idx, "chunk_type": "text_traditional"}
             if self.quality:
                 meta.update(self.quality.score(part, meta))
             chunks.append(ProcessedChunk(text=part, meta=meta))
@@ -166,6 +167,7 @@ class ProcessingPipeline:
         for chunk_result in chunk_results:
             chunk_text = chunk_result["text"]
             chunk_meta = chunk_result["meta"]
+            # 保留分块策略产生的事实字段；不再归一化（由 Indexer 兜底）
             if self.quality:
                 chunk_meta.update(self.quality.score(chunk_text, chunk_meta))
             chunks.append(ProcessedChunk(text=chunk_text, meta=chunk_meta))

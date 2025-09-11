@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional
+from app.rag.vectorization.metadata_utils import normalize_meta_for_vector
 
 
 @dataclass
@@ -35,13 +36,16 @@ class ManualUploadSource:
     def process_items(items: List[UploadItem]) -> List[Dict[str, Any]]:
         raw_samples: List[Dict[str, Any]] = []
         for item in items:
+            # 由统一归一化负责补齐与默认值，此处仅透传上传方提供的元信息
             meta = {
+                **(item.metadata or {}),
                 "source": "manual_upload",
                 "filename": item.filename,
-                "content_type": item.content_type,
+                "content_type": item.content_type
             }
-            if item.metadata:
-                meta.update(item.metadata)
+
+            # 统一化元数据（按白名单补齐、扁平化）
+            meta = normalize_meta_for_vector(meta)
 
             # 暂不解析文件内容为文本，交由 processing/media/* 处理
             raw = {
@@ -51,5 +55,3 @@ class ManualUploadSource:
             raw_samples.append(raw)
 
         return raw_samples
-
-

@@ -18,24 +18,26 @@ class VectorizationConfig:
 
     # 数据库
     database: Dict[str, Any] = None
+    collection_name: str = None
 
     @classmethod
     def from_config_manager(cls) -> "VectorizationConfig":
         cfg = get_config_manager().get_config().get("vectorization", {})
+        
+        # 从 database.collection_name 读取集合名
+        database = cfg.get("database", {})
+        collection_name = database.get("collection_name")
+        if not collection_name:
+            raise ValueError("vectorization.database.collection_name 未配置")
+        
         instance = cls(
             model_name=cfg.get("model_name", cls.model_name),
             device=cfg.get("device", cls.device),
             batch_size=cfg.get("batch_size", cls.batch_size),
-            database=cfg.get("database", {}),
+            database=database,
+            collection_name=collection_name,
         )
-
-        # 仅从 database.collection_name 读取集合名（不再回落旧路径）
-        db = instance.database or {}
-        collection_name = db.get("collection_name")
-        if not collection_name:
-            raise ValueError("vectorization.database.collection_name 未配置")
-        # 动态设置为实例属性，保持下游 self.config.collection_name 可用
-        setattr(instance, "collection_name", collection_name)
+        
         return instance
 
 

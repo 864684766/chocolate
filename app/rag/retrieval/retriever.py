@@ -74,7 +74,7 @@ class KeywordRetriever:
         result = self.db.get(
             collection_name=self.collection_name,
             where=q.where,
-            include=["documents", "metadatas", "data"],
+            include=["documents", "metadatas"],
         )
 
         docs: List[str] = result.get("documents", [])

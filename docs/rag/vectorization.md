@@ -21,37 +21,61 @@ app/rag/vectorization/
 - `chunks = ProcessingPipeline().run(samples)` 得到 `List[ProcessedChunk]`
 - `VectorIndexer(cfg).index_chunks(chunks)` 生成向量并写入集合 `cfg.collection_name`（其值来自 `vectorization.database.collection_name`）
 
+### 统一规范化与去重（新增）
+
+为保证 where 可预期、入库幂等与检索质量，向量化前新增统一处理：
+
+1. 文本规范化 `normalize_text_for_vector(text)`
+
+- NFKC 规范化；移除控制字符；将所有空白折叠为单空格并 trim；不做长度截断
+- 该结果用于写入 `documents`、生成稳定 ID 与向量编码
+
+2. 元数据规范化 `normalize_meta_for_vector(meta)`
+
+- 只保留 `vectorization.metadata_whitelist` 中的键；缺省值按类型自动补齐
+- 配置格式：`[{ field: string, type: string }]`，示例见下；全局约定 meta 为扁平结构（不做嵌套展开）
+
+3. 稳定 ID、去重与 upsert
+
+- 稳定 ID：`{doc_id or filename}:{chunk_index}:{sha1(norm_text)[:16]}`
+- 批内去重：按稳定 ID 去重
+- 库内过滤：`get(ids=...)` 过滤已存在 ID 后再写入
+- upsert：已存在且内容/元数据变化则 update，否则 add
+- 索引器会输出统计日志：`raw / batch_dedup / existed / written / updated`
+
+> 提示：若希望 where 生效，请确保需要过滤的键被加入 `metadata_whitelist`，并在入口/管线阶段保证这些键有值（即使为空串/0/False）。
+
 ## 配置（app_config.json）
 
 位置：`config/app_config.json > vectorization`
 
-```json
+```jsonc
 {
   "vectorization": {
     "model_name": "D:/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     "device": "auto",
     "batch_size": 32,
     "metadata_whitelist": [
-      "doc_id",
-      "source",
-      "filename",
-      "content_type",
-      "media_type",
-      "chunk_index",
-      "chunk_type",
-      "chunk_size",
-      "created_at",
-      "page_number",
-      "start_pos",
-      "end_pos",
-      "region_index",
-      "ocr_engine",
-      "image_format",
-      "total_texts",
-      "min_x",
-      "max_x",
-      "min_y",
-      "max_y"
+      { "field": "doc_id", "type": "string" },
+      { "field": "source", "type": "string" },
+      { "field": "filename", "type": "string" },
+      { "field": "content_type", "type": "string" },
+      { "field": "media_type", "type": "string" },
+      { "field": "chunk_index", "type": "number" },
+      { "field": "chunk_type", "type": "string" },
+      { "field": "chunk_size", "type": "number" },
+      { "field": "created_at", "type": "string" },
+      { "field": "page_number", "type": "number" },
+      { "field": "start_pos", "type": "number" },
+      { "field": "end_pos", "type": "number" },
+      { "field": "region_index", "type": "number" },
+      { "field": "ocr_engine", "type": "string" },
+      { "field": "image_format", "type": "string" },
+      { "field": "total_texts", "type": "number" },
+      { "field": "min_x", "type": "number" },
+      { "field": "max_x", "type": "number" },
+      { "field": "min_y", "type": "number" },
+      { "field": "max_y", "type": "number" }
     ],
     "database": {
       "host": "124.71.135.104",

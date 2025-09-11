@@ -1,16 +1,15 @@
 # from __future__ import annotations
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional, Dict
 #
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 #
-from ..agent import build_agent
 from ..core.agent_service import initialize_agent_chain, get_runnable_config
 from ..config import get_config_manager
 from .schemas import BaseResponse, ResponseCode, ResponseMessage
-from datetime import datetime
+from datetime import datetime, timezone
 
 #
 router = APIRouter()
@@ -38,29 +37,20 @@ class InvokeData(BaseModel):
 
 @router.post("/invoke", response_model=BaseResponse)
 def agent_invoke(req: InvokeRequest):
+    session_id = req.session_id or "guest"
+    runnable_config_obj = get_runnable_config(session_id)
     try:
-        # 配置会话ID（无则使用固定访客ID，仍然实现无状态）x
-        session_id = req.session_id or "guest"
-        runnable_config_obj = get_runnable_config(session_id)
-
-        _global_agent_chain_instance = initialize_agent_chain(req.ai_type,req.provider)
-
-        result = _global_agent_chain_instance.invoke(
-            {"input": req.input},
-            config=runnable_config_obj
-        )
-
-        # AgentExecutor 默认返回 {"output": str}
+        chain = initialize_agent_chain(req.ai_type, req.provider)
+        result = chain.invoke({"input": req.input}, config=runnable_config_obj)
         answer = result.get("output", result) if isinstance(result, dict) else str(result)
         return BaseResponse(
             code=ResponseCode.OK,
             message=ResponseMessage.SUCCESS,
-            data=InvokeData(answer=answer).dict(),
+            data=InvokeData(answer=answer).model_dump(),
             request_id=runnable_config_obj.get("configurable", {}).get("session_id", ""),
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )
-    except Exception as e:
-        # 丰富错误返回，便于定位 Gemini Pro 空返回成因
+    except (RuntimeError, ValueError) as e:
         cfg = get_config_manager()
         settings = cfg.get_settings(req.ai_type, req.provider)
         model_cfg = cfg.get_model_config(settings.provider, settings.model)
@@ -75,6 +65,6 @@ def agent_invoke(req: InvokeRequest):
             code=ResponseCode.UPSTREAM_ERROR,
             message=ResponseMessage.UPSTREAM_ERROR,
             data=detail,
-            request_id=runnable_config_obj.get("configurable", {}).get("session_id", "") if 'runnable_config_obj' in locals() else "",
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            request_id=runnable_config_obj.get("configurable", {}).get("session_id", ""),
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )

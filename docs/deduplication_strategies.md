@@ -1,8 +1,17 @@
-# 去重策略详解
+# 去重策略详解（更新）
 
 ## 概述
 
-在 Chocolate 项目的 RAG 系统中，存在多种去重方法，每种方法都有其特定的使用场景和优势。本文档详细解释了这些去重策略的设计原理、使用场景和实现细节。
+在 Chocolate 项目的 RAG 系统中，存在多种去重方法，每种方法都有其特定的使用场景和优势。本文档在原有内容基础上，新增了“统一规范化 + 稳定 ID + 批内去重 + 库内过滤”的工程化流程说明。
+
+### 新增的标准流程
+
+- 文本规范化：`normalize_text_for_vector(text)`（NFKC、去控制字符、空白折叠、截断）
+- 元数据规范化：`normalize_meta_for_vector(meta)`（白名单保留与缺省填充，图片/区域展开）
+- 稳定 ID：`{doc_id or filename}:{chunk_index}:{sha1(norm_text)[:16]}`
+- 批内去重：按稳定 ID 字典去重
+- 库内过滤：`get(ids=...)` 过滤已存在 ID 后再 `add`
+- 统计日志：`raw / batch_dedup / existed / written`
 
 ## 去重方法分类
 

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any, Tuple, Set
 from fastapi import UploadFile, HTTPException
 import os
 
-from app.rag.data_ingestion.validators import classify_files, SUPPORTED_EXTENSIONS
+from app.rag.data_ingestion.validators import classify_files
 from app.rag.data_ingestion.sources.manual_upload import ManualUploadSource, UploadItem
 from app.rag.processing.interfaces import RawSample
 from app.rag.processing.pipeline import ProcessingPipeline
+from app.config import get_config_manager
 
 
 def classify_or_400(files: List[UploadFile]) -> Tuple[List[UploadFile], List[Dict[str, str]]]:
@@ -18,22 +19,42 @@ def classify_or_400(files: List[UploadFile]) -> Tuple[List[UploadFile], List[Dic
     accepted, rejected = classify_files(files)
     if accepted:
         return accepted, rejected
+    # 读取配置中的受支持后缀
+    cfg = get_config_manager().get_config()
+    supported = sorted(list((cfg.get("ingestion", {}) or {}).get("supported_extensions", [])))
     raise HTTPException(
         status_code=400,
         detail={
             "error": "no supported files",
-            "supported_extensions": sorted(list(SUPPORTED_EXTENSIONS)),
+            "supported_extensions": supported,
             "rejected": rejected,
         },
     )
 
 
-# ---- media type helpers ----
-_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
-_VIDEO_EXT = {".mp4", ".mov", ".avi", ".mkv", ".flv", ".wmv", ".webm"}
-_AUDIO_EXT = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus"}
-_PDF_EXT = {".pdf"}
-_TEXT_EXT = {".txt", ".md", ".rst", ".csv", ".tsv", ".json"}
+def _media_map_from_config() -> Dict[str, str]:
+    """从配置加载后缀到媒体类型的映射。
+
+    支持两种写法：
+    - 简单数组 ingestion.supported_extensions 仅声明后缀（默认按文本处理）
+    - 对象数组 ingestion.media_map: [{"ext": ".png", "media_type": "image"}, ...]
+    """
+    cfg = get_config_manager().get_config()
+    ing = (cfg.get("ingestion", {}) or {})
+    mapping_list = ing.get("media_map", [])
+    mapping: Dict[str, str] = {}
+    if isinstance(mapping_list, list) and mapping_list and isinstance(mapping_list[0], dict):
+        for it in mapping_list:
+            ext = str(it.get("ext", "")).lower()
+            mtype = str(it.get("media_type", "text"))
+            if ext:
+                mapping[ext] = mtype
+    # 回退：把 supported_extensions 全部标为 text
+    if not mapping:
+        exts: List[str] = list(ing.get("supported_extensions", []))
+        for e in exts:
+            mapping[str(e).lower()] = "text"
+    return mapping
 
 
 def detect_media_type(filename: str, content_type: Optional[str]) -> str:
@@ -54,16 +75,8 @@ def detect_media_type(filename: str, content_type: Optional[str]) -> str:
             return "text"
 
     _, ext = os.path.splitext(filename.lower())
-    if ext in _IMAGE_EXT:
-        return "image"
-    if ext in _VIDEO_EXT:
-        return "video"
-    if ext in _AUDIO_EXT:
-        return "audio"
-    if ext in _PDF_EXT:
-        return "pdf"
-    # 默认按文本处理
-    return "text"
+    mapping = _media_map_from_config()
+    return mapping.get(ext, "text")
 
 
 async def build_upload_items(accepted: List[UploadFile], dataset: Optional[str]) -> List[UploadItem]:
@@ -112,7 +125,7 @@ def build_response(files_cnt: int,
         "rejected": rejected,
         "raw_samples": len(raw_samples),
         "dataset": dataset,
-        "supported_extensions": sorted(list(SUPPORTED_EXTENSIONS)),
+        "supported_extensions": sorted(list((get_config_manager().get_config().get("ingestion", {}) or {}).get("supported_extensions", []))),
     }
     if chunks_cnt is not None:
         resp["chunks"] = chunks_cnt

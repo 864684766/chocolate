@@ -31,6 +31,35 @@ app/data_ingestion/
 - 图片：仅获取文件与基本 EXIF；OCR 在 processing 层完成。
 - 音频/视频：仅提供媒体流与基础元信息；ASR/字幕抽取在 processing 层完成。
 
+## 配置：支持文件后缀（新增）
+
+在 `config/app_config.json` 中通过 `ingestion.supported_extensions` 配置允许上传/接入的文件后缀（小写）：
+
+```json
+{
+  "ingestion": {
+    "supported_extensions": [
+      ".txt",
+      ".md",
+      ".pdf",
+      ".docx",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".webp",
+      ".mp3",
+      ".wav",
+      ".mp4",
+      ".mov",
+      ".avi",
+      ".mkv"
+    ]
+  }
+}
+```
+
+validators 将从该配置读取后缀集合并进行校验，变更后无需改代码。
+
 ## 推荐依赖
 
 - requests/bs4/scrapy/selenium

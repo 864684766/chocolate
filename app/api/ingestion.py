@@ -7,12 +7,11 @@ from app.rag.service.ingestion_helpers import (
     classify_or_400,
     build_upload_items,
     run_manual_upload,
-    build_response,
     make_raw_sample_objects,
     process_and_vectorize,
 )
 from .schemas import BaseResponse, ResponseCode, ResponseMessage
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 router = APIRouter()
@@ -47,7 +46,7 @@ async def upload_files(
         message=ResponseMessage.SUCCESS,
         data=payload,
         request_id="",
-        timestamp=datetime.utcnow().isoformat() + "Z",
+        timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
 

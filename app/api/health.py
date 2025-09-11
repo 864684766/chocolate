@@ -6,7 +6,7 @@ from ..config import get_config_manager
 from ..llm_adapters.factory import LLMProviderFactory
 from ..core.agent_service import get_agent_service
 from .schemas import BaseResponse, ResponseCode, ResponseMessage
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter()
 
@@ -70,9 +70,9 @@ def health_check():
                 cached_models=cached_models_info,
                 cached_chains=cached_chains_info,
                 cache_stats=cache_stats
-            ).dict(),
+            ).model_dump(),
             request_id="",
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )
     except Exception as e:
         return BaseResponse(
@@ -86,9 +86,9 @@ def health_check():
                 cached_models={},
                 cached_chains={},
                 cache_stats={},
-            ).dict(),
+            ).model_dump(),
             request_id="",
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
 
@@ -119,9 +119,9 @@ def get_cache_info():
             chain_cache_count=len(cached_chains),
             model_cache_keys=model_cache_keys,
             chain_cache_keys=chain_cache_keys
-        ).dict(),
+        ).model_dump(),
         request_id="",
-        timestamp=datetime.utcnow().isoformat() + "Z",
+        timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -129,25 +129,21 @@ def get_cache_info():
 def clear_cache():
     """清除所有缓存"""
     try:
-        # 清除模型缓存
         LLMProviderFactory.clear_cache()
-        
-        # 清除Agent链缓存
         agent_service = get_agent_service()
         agent_service.clear_cache()
-        
         return BaseResponse(
             code=ResponseCode.OK,
             message=ResponseMessage.SUCCESS,
             data={"message": "缓存已清除"},
             request_id="",
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )
-    except Exception as e:
+    except (RuntimeError, ValueError) as e:
         return BaseResponse(
             code=ResponseCode.BAD_REQUEST,
             message=ResponseMessage.BAD_REQUEST,
-            data=None,
+            data={"error": str(e)},
             request_id="",
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )

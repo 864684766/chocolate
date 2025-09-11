@@ -75,14 +75,15 @@ def test_keyword_retriever_live_query():
         pytest.skip("ChromaDB 不可达，跳过集成测试")
 
     retriever = KeywordRetriever()
-    q = RetrievalQuery(query="", where=None, top_k=5, score_threshold=0.0)
+    q = RetrievalQuery(query="女生的特征有哪些", where=None, top_k=5, score_threshold=0.0)
     result = retriever.search(q)
 
     if not result.items:
         pytest.skip("集合暂无可检索数据（或 where 过严），跳过")
 
     # KeywordRetriever 当前实现固定 score=1.0
-    assert all(abs(it.score - 1.0) < 1e-6 for it in result.items)
+    res = (abs(it.score - 1.0) < 1e-6 for it in result.items)
+    assert all(res)
 
 
 @pytest.mark.integration
@@ -146,7 +147,7 @@ if __name__ == "__main__":
 
         # Vector
         vr = VectorRetriever()
-        qv = RetrievalQuery(query="测试", where=None, top_k=5, score_threshold=0.0)
+        qv = RetrievalQuery(query="给我一个女孩儿的信息", where=None, top_k=5, score_threshold=0.0)
         rv = vr.search(qv)
         print("\n[Vector] items:")
         for it in rv.items:
