@@ -168,6 +168,138 @@ docs/                      # 文档
 - **基础设施完备**：数据库、会话、缓存、异常、监控等基础设施齐全
 - **管理与运维**：内置监控、配置热更新、审计日志、健康检查等运维工具
 - **RAG 工具化**：数据处理、质量检测、分块等工具模块化，便于复用
+- **配置驱动**：服务器配置从 `config/app_config.json` 读取，支持灵活部署
+
+## 服务启动与配置
+
+### 启动方式
+
+项目支持两种启动方式：
+
+#### 1. 直接启动（推荐）
+
+```bash
+python main.py
+```
+
+#### 2. 使用 uvicorn 命令
+
+```bash
+# 开发环境（支持热重载）
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# 生产环境
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+### 服务器配置
+
+服务器配置通过 `config/app_config.json` 中的 `server` 部分进行管理：
+
+```json
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8000,
+    "reload": true,
+    "description": "API服务器配置"
+  }
+}
+```
+
+**配置参数说明**：
+
+- **host**: 服务器监听地址
+
+  - `"0.0.0.0"`: 监听所有网络接口（推荐用于容器化部署）
+  - `"127.0.0.1"`: 仅监听本地回环地址（仅本机访问）
+  - `"localhost"`: 等同于 `127.0.0.1`
+
+- **port**: 服务器端口号
+
+  - 默认: `8000`
+  - 生产环境建议使用: `8080`、`80`、`443` 等标准端口
+
+- **reload**: 热重载开关
+  - `true`: 开发环境，代码变更时自动重启服务
+  - `false`: 生产环境，提高性能稳定性
+
+### 热重载机制
+
+项目实现了智能的热重载机制：
+
+```python
+# main.py 中的实现逻辑
+if reload:
+    # 使用字符串形式启用热重载
+    uvicorn.run("main:app", host=host, port=port, reload=True)
+else:
+    # 直接传递应用对象
+    uvicorn.run(app, host=host, port=port, reload=False)
+```
+
+**热重载特性**：
+
+- ✅ **开发友好**: 代码修改后自动重启，无需手动操作
+- ✅ **性能优化**: 生产环境关闭热重载，避免性能开销
+- ✅ **配置驱动**: 通过配置文件控制，无需修改代码
+- ✅ **错误处理**: 自动处理 uvicorn 的 reload 参数要求
+
+### 环境部署建议
+
+#### 开发环境
+
+```json
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8000,
+    "reload": true
+  }
+}
+```
+
+#### 生产环境
+
+```json
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "reload": false
+  }
+}
+```
+
+#### Docker 部署
+
+```json
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8000,
+    "reload": false
+  }
+}
+```
+
+### 启动日志示例
+
+正常启动时的日志输出：
+
+```
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [5328] using WatchFiles
+Connected to: <socket.socket fd=692, family=2, type=1, proto=0, laddr=('127.0.0.1', 49742), raddr=('127.0.0.1', 49720)>.
+2025-09-12 10:16:59,015 - watchfiles.main - INFO - 5 changes detected
+```
+
+**日志说明**：
+
+- `Uvicorn running on http://0.0.0.0:8000`: 服务启动成功
+- `Started reloader process`: 热重载进程启动
+- `Connected to`: 数据库连接成功
+- `changes detected`: 文件监控检测到变更
 
 ## 管理与运维工具使用方式
 

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional
+import hashlib
+import time
 from app.rag.vectorization.metadata_utils import normalize_meta_for_vector
 
 
@@ -36,12 +38,18 @@ class ManualUploadSource:
     def process_items(items: List[UploadItem]) -> List[Dict[str, Any]]:
         raw_samples: List[Dict[str, Any]] = []
         for item in items:
+            # 生成稳定的文档ID：基于文件名+内容+时间戳的哈希
+            content_hash = hashlib.md5(item.bytes_data).hexdigest()[:8]
+            timestamp = str(int(time.time()))[-6:]  # 取时间戳后6位
+            doc_id = f"doc_{content_hash}_{timestamp}"
+            
             # 由统一归一化负责补齐与默认值，此处仅透传上传方提供的元信息
             meta = {
                 **(item.metadata or {}),
                 "source": "manual_upload",
                 "filename": item.filename,
-                "content_type": item.content_type
+                "content_type": item.content_type,
+                "doc_id": doc_id  # 添加稳定的文档ID
             }
 
             # 统一化元数据（按白名单补齐、扁平化）

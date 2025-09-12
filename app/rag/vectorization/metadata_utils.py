@@ -22,33 +22,6 @@ def _is_primitive(value: Any) -> bool:
     return isinstance(value, (str, int, float, bool)) or value is None
 
 
-def _extract_image_meta(meta: Dict[str, Any]) -> Dict[str, Primitive]:
-    """从 image_meta 提取可检索的原子键。
-
-    提取：ocr_engine、image_format、total_texts。
-    """
-    out: Dict[str, Primitive] = {}
-    im = meta.get("image_meta")
-    if isinstance(im, dict):
-        for k in ("ocr_engine", "image_format", "total_texts"):
-            v = im.get(k)
-            if _is_primitive(v):
-                out[k] = v  # type: ignore[assignment]
-    return out
-
-
-def _extract_bounds(meta: Dict[str, Any]) -> Dict[str, Primitive]:
-    """从 region_bounds/dict 中提取边界为原子键。"""
-    out: Dict[str, Primitive] = {}
-    bounds = meta.get("region_bounds")
-    if isinstance(bounds, dict):
-        for k in ("min_x", "max_x", "min_y", "max_y"):
-            v = bounds.get(k)
-            if _is_primitive(v):
-                out[k] = v  # type: ignore[assignment]
-    return out
-
-
 def build_metadata_from_meta(meta: Dict[str, Any]) -> Dict[str, Primitive]:
     """根据配置白名单构造写库用 metadatas（仅基础类型，扁平）。
 
@@ -71,7 +44,8 @@ def build_metadata_from_meta(meta: Dict[str, Any]) -> Dict[str, Primitive]:
             continue
         v = meta.get(k)
         # 跳过 None/空串，Chroma 不接受 null 值
-        if v is None:
+        # 注意：字段缺失是正常的，ChromaDB 支持稀疏元数据
+        if v is None or v == "":
             continue
         t = types_map.get(k)
         if t == "number":

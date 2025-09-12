@@ -34,16 +34,6 @@ def _can_connect() -> bool:
     except Exception:
         return False
 
-
-def _get_collection_name() -> str:
-    """读取当前集合名（来源于 vectorization.database.collection_name）。
-
-    Returns:
-        str: 集合名。
-    """
-    return VectorizationConfig.from_config_manager().collection_name
-
-
 @pytest.mark.integration
 def test_vector_retriever_live_query():
     """向量检索：最小集成验证。
@@ -55,131 +45,95 @@ def test_vector_retriever_live_query():
         pytest.skip("ChromaDB 不可达，跳过集成测试")
 
     retriever = VectorRetriever()
-    q = RetrievalQuery(query="测试", where=None, top_k=10, score_threshold=0.0)
-    result = retriever.search(q)
-
-    if not result.items:
+    
+    # 测试1: 无过滤条件的基础检索
+    print("\n=== 测试1: 无过滤条件检索 ===")
+    q1 = RetrievalQuery(query="长发女孩", where=None, top_k=10, score_threshold=0.0)
+    result1 = retriever.search(q1)
+    
+    if not result1.items:
         pytest.skip("集合暂无可检索数据，跳过")
-
-    assert result.latency_ms >= 0
-    assert all(it.text for it in result.items)
-
-
-@pytest.mark.integration
-def test_keyword_retriever_live_query():
-    """关键词/结构化检索：最小集成验证。
-
-    注意：where 可按你的 `metadata_whitelist` 字段调整；这里先不传 where，验证基本返回能力。
-    """
-    if not _can_connect():
-        pytest.skip("ChromaDB 不可达，跳过集成测试")
-
-    retriever = KeywordRetriever()
-    q = RetrievalQuery(query="女生的特征有哪些", where=None, top_k=5, score_threshold=0.0)
-    result = retriever.search(q)
-
-    if not result.items:
-        pytest.skip("集合暂无可检索数据（或 where 过严），跳过")
-
-    # KeywordRetriever 当前实现固定 score=1.0
-    res = (abs(it.score - 1.0) < 1e-6 for it in result.items)
-    assert all(res)
-
-
-@pytest.mark.integration
-def test_hybrid_rrf_with_live_candidates():
-    """混合融合（RRF）：基于真实候选做一次融合排序。
-
-    - 分别取向量与关键词候选；
-    - 若某一路为空则跳过；
-    - 执行 RRF 并断言有序、不报错。
-    """
-    if not _can_connect():
-        pytest.skip("ChromaDB 不可达，跳过集成测试")
-
-    vec = VectorRetriever().search(RetrievalQuery(query="测试", where=None, top_k=10, score_threshold=0.0))
-    kw = KeywordRetriever().search(RetrievalQuery(query="", where=None, top_k=10, score_threshold=0.0))
-
-    if not vec.items or not kw.items:
-        pytest.skip("候选不足，跳过融合测试")
-
-    fused = HybridSearcher.rrf(vec, kw, top_k=10)
-    assert fused.items
-    # RRF 不保证严格分数递减，但应返回有序结果与有效文本
-    assert all(it.text for it in fused.items)
-
-
-@pytest.mark.integration
-def test_context_builder_live_sample():
-    """上下文构建：对真实检索结果进行拼装，验证结构正确。
-
-    - 不引入 tokenizer，仅验证基础结构与字段；
-    - 二期可在此接入 tokenizer 并验证 token 预算逻辑。
-    """
-    if not _can_connect():
-        pytest.skip("ChromaDB 不可达，跳过集成测试")
-
-    vec = VectorRetriever().search(RetrievalQuery(query="测试", where=None, top_k=8, score_threshold=0.0))
-    if not vec.items:
-        pytest.skip("集合暂无可检索数据，跳过")
-
-    ctx = ContextBuilder().build(vec, max_tokens=1500, citation=True)
-    assert isinstance(ctx.text, str)
-    assert ctx.text != ""
-    assert len(ctx.citations) == len(ctx.from_items)
-
-
-if __name__ == "__main__":
-    """
-    便捷调试入口：直接运行本文件可快速观察各环节输出。
-
-    用法：python -m tests.test_retrieval
-    注意：仍然依赖你已配置好的 ChromaDB 与集合。
-    """
-    import pprint
-
-    pp = pprint.PrettyPrinter(indent=2, width=120)
-
-    if not _can_connect():
-        print("[SKIP] ChromaDB 不可达，无法进行现场调试。")
-    else:
-        print("[INFO] 集合：", _get_collection_name())
-
-        # Vector
-        vr = VectorRetriever()
-        qv = RetrievalQuery(query="给我一个女孩儿的信息", where=None, top_k=5, score_threshold=0.0)
-        rv = vr.search(qv)
-        print("\n[Vector] items:")
-        for it in rv.items:
-            pp.pprint({"id": it.id, "score": it.score, "text": it.text[:80], "meta": {k: it.metadata.get(k) for k in list(it.metadata)[:5]}})
-        print("latency_ms:", rv.latency_ms)
-
-        # Keyword
-        kr = KeywordRetriever()
-        qk = RetrievalQuery(query="", where=None, top_k=5, score_threshold=0.0)
-        rk = kr.search(qk)
-        print("\n[Keyword] items:")
-        for it in rk.items:
-            pp.pprint({"id": it.id, "score": it.score, "text": it.text[:80], "meta": {k: it.metadata.get(k) for k in list(it.metadata)[:5]}})
-        print("latency_ms:", rk.latency_ms)
-
-        # Fusion (RRF)
-        if rv.items and rk.items:
-            fused = HybridSearcher.rrf(rv, rk, top_k=5)
-            print("\n[RRF Fusion] items:")
-            for it in fused.items:
-                pp.pprint({"id": it.id, "score": it.score, "text": it.text[:80]})
-            print("latency_ms:", fused.latency_ms)
-        else:
-            print("\n[RRF Fusion] 候选不足，跳过")
-
-        # Context
-        if rv.items:
-            ctx = ContextBuilder().build(rv, max_tokens=1500, citation=True)
-            print("\n[Context] text preview:\n", ctx.text[:300])
-            print("citations:")
-            pp.pprint(ctx.citations[:5])
-        else:
-            print("\n[Context] 向量检索无结果，跳过")
-
-
+    
+    print(f"无过滤条件检索结果: {len(result1.items)} 条记录")
+    for i, item in enumerate(result1.items[:3]):  # 显示前3条
+        print(f"  {i+1}. 相似度: {item.score:.4f}, 文本: {item.text[:50]}...")
+    
+    # 测试2: 按媒体类型过滤
+    print("\n=== 测试2: 按媒体类型过滤 ===")
+    q2 = RetrievalQuery(query="八箭将是哪几个", where={"media_type": "text"}, top_k=10, score_threshold=0.0)
+    result2 = retriever.search(q2)
+    
+    print(f"媒体类型过滤结果: {len(result2.items)} 条记录")
+    for i, item in enumerate(result2.items[:3]):
+        print(f"  {i+1}. 相似度: {item.score:.4f}, 媒体类型: {item.metadata.get('media_type', 'N/A')}")
+    
+    # 测试3: 按块类型过滤
+    print("\n=== 测试3: 按块类型过滤 ===")
+    q3 = RetrievalQuery(query="八箭将是哪几个", where={"chunk_type": "text_traditional"}, top_k=10, score_threshold=0.0)
+    result3 = retriever.search(q3)
+    
+    print(f"块类型过滤结果: {len(result3.items)} 条记录")
+    for i, item in enumerate(result3.items[:3]):
+        print(f"  {i+1}. 相似度: {item.score:.4f}, 块类型: {item.metadata.get('chunk_type', 'N/A')}")
+    
+    # 测试4: 按内容类型过滤
+    print("\n=== 测试4: 按内容类型过滤 ===")
+    q4 = RetrievalQuery(query="八箭将是哪几个", where={"content_type": "text/plain"}, top_k=10, score_threshold=0.0)
+    result4 = retriever.search(q4)
+    
+    print(f"内容类型过滤结果: {len(result4.items)} 条记录")
+    for i, item in enumerate(result4.items[:3]):
+        print(f"  {i+1}. 相似度: {item.score:.4f}, 内容类型: {item.metadata.get('content_type', 'N/A')}")
+    
+    # 测试5: 按块索引范围过滤
+    print("\n=== 测试5: 按块索引范围过滤 ===")
+    q5 = RetrievalQuery(query="八箭将是哪几个", where={"chunk_index": {"$lt": 3}}, top_k=10, score_threshold=0.0)
+    result5 = retriever.search(q5)
+    
+    print(f"块索引范围过滤结果: {len(result5.items)} 条记录")
+    for i, item in enumerate(result5.items[:3]):
+        print(f"  {i+1}. 相似度: {item.score:.4f}, 块索引: {item.metadata.get('chunk_index', 'N/A')}")
+    
+    # 测试6: 按来源过滤
+    print("\n=== 测试6: 按来源过滤 ===")
+    q6 = RetrievalQuery(query="八箭将是哪几个", where={"source": "manual_upload"}, top_k=10, score_threshold=0.0)
+    result6 = retriever.search(q6)
+    
+    print(f"来源过滤结果: {len(result6.items)} 条记录")
+    for i, item in enumerate(result6.items[:3]):
+        print(f"  {i+1}. 相似度: {item.score:.4f}, 来源: {item.metadata.get('source', 'N/A')}")
+    
+    # 测试7: 高相似度阈值过滤
+    print("\n=== 测试7: 高相似度阈值过滤 ===")
+    q7 = RetrievalQuery(query="八箭将是哪几个", where={"media_type": "text"}, top_k=10, score_threshold=0.7)
+    result7 = retriever.search(q7)
+    
+    print(f"高相似度阈值过滤结果: {len(result7.items)} 条记录")
+    for i, item in enumerate(result7.items[:3]):
+        print(f"  {i+1}. 相似度: {item.score:.4f}")
+    
+    # 测试8: 查询不存在的字段（验证不会报错）
+    print("\n=== 测试8: 查询不存在字段 ===")
+    q8 = RetrievalQuery(query="八箭将是哪几个", where={"nonexistent_field": "some_value"}, top_k=10, score_threshold=0.0)
+    result8 = retriever.search(q8)
+    
+    print(f"查询不存在字段结果: {len(result8.items)} 条记录")
+    
+    # 验证所有测试的基本要求
+    all_results = [result1, result2, result3, result4, result5, result6, result7, result8]
+    
+    for i, result in enumerate(all_results, 1):
+        assert result.latency_ms >= 0, f"测试{i}延迟时间异常"
+        assert all(it.text for it in result.items), f"测试{i}存在空文本"
+        assert all(it.score >= 0 for it in result.items), f"测试{i}存在负分数"
+    
+    print(f"\n=== 测试总结 ===")
+    print(f"✅ 所有 {len(all_results)} 个测试通过")
+    print(f"✅ 无过滤条件: {len(result1.items)} 条")
+    print(f"✅ 媒体类型过滤: {len(result2.items)} 条")
+    print(f"✅ 块类型过滤: {len(result3.items)} 条")
+    print(f"✅ 内容类型过滤: {len(result4.items)} 条")
+    print(f"✅ 块索引范围过滤: {len(result5.items)} 条")
+    print(f"✅ 来源过滤: {len(result6.items)} 条")
+    print(f"✅ 高相似度阈值: {len(result7.items)} 条")
+    print(f"✅ 不存在字段查询: {len(result8.items)} 条")

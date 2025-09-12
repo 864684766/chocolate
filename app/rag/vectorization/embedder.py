@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any
 import logging
 from sentence_transformers import SentenceTransformer
 import torch
