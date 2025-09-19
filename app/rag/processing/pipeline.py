@@ -8,7 +8,6 @@ from .lang_zh import ChineseProcessor
 from .media.chunking import ChunkingStrategyFactory
 from .media.extractors import MediaExtractorFactory
 from .utils.chunking import decide_chunk_params
-from app.rag.vectorization.metadata_utils import normalize_meta_for_vector
 
 
 class ProcessingPipeline:

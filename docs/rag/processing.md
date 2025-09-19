@@ -285,7 +285,7 @@ chunk_size, overlap = decide_chunk_params(media_type, content)
 
 #### 2. 控制输出风格/语言
 
-通过配置文件中的 `image_captioning.prompt` 控制，无需在代码中传 `meta`。运行时修改提示词需重载配置。
+通过配置文件中的 `image_captioning.prompt` 控制，无需在代码中传入额外的类型标记。运行时修改提示词需重载配置。
 注意：当前实现使用 `image-to-text` 管线，部分模型（如 BLIP）不支持指令，`prompt` 将被忽略。
 
 #### 3. 模型与语言策略
@@ -305,12 +305,12 @@ chunk_size, overlap = decide_chunk_params(media_type, content)
 ```json
 {
   "generation": {
-    "num_captions": 3 // 生成3个描述
+    "num_captions": 3
   }
 }
 ```
 
-系统会在翻译后自动进行去重处理，无需手动配置。
+系统会在翻译后自动进行去重处理，无需在代码里额外传参。
 
 ### 新的处理流程说明
 
@@ -361,14 +361,7 @@ A: 这是 BLIP 模型的正常行为。系统会在翻译后自动进行去重�
 
 #### Q: 如何让模型生成中文描述？
 
-A: 使用`chinese_friendly`模型类型：
-
-```python
-meta = {
-    "media_type": "image",
-    "caption_model_type": "chinese_friendly"  # 会使用中文提示词
-}
-```
+A: 通过在配置中设置 `image_captioning.translation.enabled=true` 使用统一的 EN→ZH 翻译策略，或直接选择支持中文输出的图像描述模型；无需在代码中传入 `caption_model_type` 之类的标记字段。
 
 #### Q: 如何提高 OCR 识别准确率？
 

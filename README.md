@@ -15,6 +15,7 @@
 - 测试指南：[docs/tests.md](docs/tests.md)
 - 扩展与示例：[docs/extensions.md](docs/extensions.md)
 - 常见问题（FAQ）：[docs/faq.md](docs/faq.md)
+- 性能优化指南：[docs/performance_optimization.md](docs/performance_optimization.md)
 
 ## RAG 分章节文档
 

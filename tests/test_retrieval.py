@@ -13,7 +13,6 @@ import pytest
 from app.rag.retrieval import (
     RetrievalQuery,
     VectorRetriever,
-    KeywordRetriever,
     HybridSearcher,
     ContextBuilder,
 )
@@ -46,7 +45,7 @@ def test_vector_retriever_live_query():
 
     retriever = VectorRetriever()
     
-    # 测试1: 无过滤条件的基础检索
+    # 测试1: 无过滤条件的基础检索（仅向量 → 融合层应透传，不参与本用例）
     print("\n=== 测试1: 无过滤条件检索 ===")
     q1 = RetrievalQuery(query="长发女孩", where=None, top_k=10, score_threshold=0.0)
     result1 = retriever.search(q1)

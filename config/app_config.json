@@ -86,6 +86,26 @@
     }
   },
 
+  "retrieval": {
+    "scoring": {
+      "metric": "cosine_distance",
+      "normalize": true,
+      "params": { "alpha": 1.0 }
+    },
+    "rerank": {
+      "enabled": false,
+      "model_name": "D:/models/BAAI/bge-reranker-base",
+      "top_n": 10,
+      "timeout_ms": 800
+    },
+    "meilisearch": {
+      "enabled": false,
+      "host": "http://localhost:7700",
+      "api_key": "",
+      "index": "documents"
+    }
+  },
+
   "providers": {
     "openai": {
       "api_key": "your_openai_api_key_here",
