@@ -2,9 +2,7 @@
 
 提供模块化的 API 路由组织结构，按业务领域分离不同路由。
 """
-from fastapi import FastAPI,Request
-from fastapi.exceptions import RequestValidationError
-from starlette.responses import JSONResponse
+from fastapi import FastAPI
 from app.infra.exceptions.exceptions import register_exception_handlers
 from app.infra.logging import setup_logging
 from .health import router as health_router

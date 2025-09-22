@@ -78,7 +78,7 @@ def retrieval_search(req: InvokeRequest):
     """
     与 agent_invoke 同构的检索接口：
     - 输入：InvokeRequest.input 作为 query；其他字段可留空
-    - 流程：Vector 召回 →（可选）交叉编码重排 → 返回拼接预览与检索明细
+    - 流程：Vector 召回 → 交叉编码重排（始终执行） → 返回拼接预览与检索明细
     - 输出：BaseResponse(data=InvokeData(answer=...))，answer 为拼接预览
     """
     session_id = req.session_id or "guest"
@@ -87,7 +87,6 @@ def retrieval_search(req: InvokeRequest):
         # 读取检索与重排配置
         cfg = get_config_manager().get_config("retrieval") or {}
         rerank_cfg = cfg.get("rerank", {})
-        enable_rerank = bool(rerank_cfg.get("enabled", False))
         rerank_model = str(rerank_cfg.get("model_name", "")) or None
         top_n = int(rerank_cfg.get("top_n", 10))
 
@@ -97,7 +96,7 @@ def retrieval_search(req: InvokeRequest):
         result = retriever.search(q)
 
         items = result.items
-        if enable_rerank and items:
+        if items:
             reranker = CrossEncoderReranker(model_name=rerank_model)
             items = reranker.rerank(items, top_n=top_n, query=req.input)
 

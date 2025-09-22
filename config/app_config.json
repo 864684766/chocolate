@@ -93,10 +93,10 @@
       "params": { "alpha": 1.0 }
     },
     "rerank": {
-      "enabled": false,
       "model_name": "D:/models/BAAI/bge-reranker-base",
       "top_n": 10,
-      "timeout_ms": 800
+      "timeout_ms": 800,
+      "batch_size": 16
     },
     "meilisearch": {
       "enabled": false,

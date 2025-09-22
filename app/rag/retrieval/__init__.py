@@ -7,7 +7,7 @@
 """
 
 from .schemas import RetrievalQuery, RetrievedItem, RetrievalResult, BuiltContext
-from .retriever import VectorRetriever, KeywordRetriever
+from .retriever import VectorRetriever
 from .hybrid import HybridSearcher
 from .context_builder import ContextBuilder
 
@@ -17,7 +17,6 @@ __all__ = [
     "RetrievalResult",
     "BuiltContext",
     "VectorRetriever",
-    "KeywordRetriever",
     "HybridSearcher",
     "ContextBuilder",
 ]

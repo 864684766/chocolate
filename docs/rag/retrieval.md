@@ -125,7 +125,7 @@ app/core/tokenization/
 
 ## 重排配置（retrieval.rerank）
 
-目的：可选启用交叉编码器对候选进行精排，提升最终相关性。
+目的：交叉编码器对候选进行精排，提升最终相关性（现已默认启用）。
 
 配置位置：`config/app_config.json` → `retrieval.rerank`
 
@@ -135,10 +135,10 @@ app/core/tokenization/
 {
   "retrieval": {
     "rerank": {
-      "enabled": false,
       "model_name": "BAAI/bge-reranker-base",
       "top_n": 10,
-      "timeout_ms": 800
+      "timeout_ms": 800,
+      "batch_size": 16
     }
   }
 }
@@ -146,15 +146,15 @@ app/core/tokenization/
 
 字段说明：
 
-- enabled：是否启用重排（默认关闭）。
 - model_name：重排模型名称（示例为 BGE 系列；也可用 `cross-encoder/ms-marco-*`）。
 - top_n：重排后保留的候选数（建议与召回 top_k 对齐或略小）。
 - timeout_ms：重排超时（用于控制端到端时延）。
+- batch_size：重排推理批大小（默认 16；按显存/内存与吞吐取值 8–64 压测确定）。
 
 实现落点：
 
-- `app/rag/retrieval/reranker.py::CrossEncoderReranker`（当前为占位：按 score 排序裁剪）。
-- `app/api/agent.py::/retrieval/search` 会按该配置可选调用重排并返回前 N 条预览。
+- `app/rag/retrieval/reranker.py::CrossEncoderReranker`。
+- `app/api/agent.py::/retrieval/search` 始终执行重排并返回前 N 条预览；若模型加载失败，将退化为按向量分数排序。
 
 ## Meilisearch 配置（retrieval.meilisearch）
 
