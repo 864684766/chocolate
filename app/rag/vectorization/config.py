@@ -12,7 +12,7 @@ class VectorizationConfig:
     """
 
     # 模型/批处理
-    model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     device: str = "auto"
     batch_size: int = 32
 
@@ -31,7 +31,7 @@ class VectorizationConfig:
             raise ValueError("vectorization.database.collection_name 未配置")
         
         instance = cls(
-            model_name=cfg.get("model_name", cls.model_name),
+            model=cfg.get("model", cls.model),
             device=cfg.get("device", cls.device),
             batch_size=cfg.get("batch_size", cls.batch_size),
             database=database,

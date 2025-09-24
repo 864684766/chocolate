@@ -7,10 +7,8 @@ from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 #
 from ..core.agent_service import initialize_agent_chain, get_runnable_config
-from app.rag.retrieval.schemas import RetrievalQuery
-from app.rag.retrieval.vector_retriever import VectorRetriever
-from app.rag.retrieval.reranker import CrossEncoderReranker
 from ..config import get_config_manager
+from app.rag.retrieval.orchestrator import RetrievalOrchestrator
 from .schemas import BaseResponse, ResponseCode, ResponseMessage
 from datetime import datetime, timezone
 
@@ -84,27 +82,24 @@ def retrieval_search(req: InvokeRequest):
     session_id = req.session_id or "guest"
     runnable_config_obj = get_runnable_config(session_id)
     try:
-        # 读取检索与重排配置
-        cfg = get_config_manager().get_config("retrieval") or {}
-        rerank_cfg = cfg.get("rerank", {})
-        rerank_model = str(rerank_cfg.get("model_name", "")) or None
-        top_n = int(rerank_cfg.get("top_n", 10))
-
-        # 执行向量召回
-        retriever = VectorRetriever()
-        q = RetrievalQuery(query=req.input, where=None, top_k=top_n, score_threshold=0.0)
-        result = retriever.search(q)
-
-        items = result.items
-        if items:
-            reranker = CrossEncoderReranker(model_name=rerank_model)
-            items = reranker.rerank(items, top_n=top_n, query=req.input)
-
-        # 生成简短预览作为 answer（不调用 LLM）
-        preview_texts = [it.text for it in items[: min(3, len(items))]]
-        preview = "\n\n".join(preview_texts) if preview_texts else ""
-
-        data = InvokeData(answer=preview).model_dump()
+        cfg = get_config_manager()
+        r_cfg = cfg.get_config("retrieval") or {}
+        preview_max = int((r_cfg.get("preview") or {}).get("max_items", 3))
+        orch = RetrievalOrchestrator()
+        result = orch.run(
+            req.input,
+            options={
+                "top_k": int((r_cfg.get("rerank") or {}).get("top_n", 10)),
+                "top_n": int((r_cfg.get("rerank") or {}).get("top_n", 10)),
+                "score_threshold": 0.0,
+                "max_preview": preview_max,
+                # 默认启用生成
+                "provider": req.provider,
+                "ai_type": req.ai_type,
+            },
+        )
+        answer = result.get("content") or result.get("preview") or ""
+        data = InvokeData(answer=answer).model_dump()
         return BaseResponse(
             code=ResponseCode.OK,
             message=ResponseMessage.SUCCESS,

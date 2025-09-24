@@ -38,10 +38,10 @@ class Embedder:
         """
         try:
             device = self._get_device()
-            logger.info(f"正在加载向量化模型: {self.config.model_name}, 设备: {device}")
+            logger.info(f"正在加载向量化模型: {self.config.model}, 设备: {device}")
             
             self.model = SentenceTransformer(
-                self.config.model_name,
+                self.config.model,
                 device=device,
                 cache_folder=None  # 使用默认缓存目录
             )
@@ -50,7 +50,7 @@ class Embedder:
             
         except Exception as e:
             logger.error(f"模型加载失败: {e}")
-            raise RuntimeError(f"无法加载向量化模型 {self.config.model_name}: {e}")
+            raise RuntimeError(f"无法加载向量化模型 {self.config.model}: {e}")
 
     def _get_device(self) -> str:
         """
@@ -136,10 +136,10 @@ class Embedder:
             Dict[str, Any]: 包含模型名称、向量维度、设备等信息
         """
         if not self.model:
-            return {"model_name": self.config.model_name, "status": "not_loaded"}
+            return {"model": self.config.model, "status": "not_loaded"}
         
         return {
-            "model_name": self.config.model_name,
+            "model": self.config.model,
             "embedding_dimension": self.model.get_sentence_embedding_dimension(),
             "device": self._get_device(),
             "batch_size": self.config.batch_size,

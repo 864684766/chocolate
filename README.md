@@ -112,11 +112,19 @@ app/
 │   ├── agent.py            # Agent对话接口
 │   ├── health.py           # 健康检查接口
 │   └── ingestion.py        # 数据接入接口
-├── llm_adapters/          # LLM适配器
-│   ├── __init__.py
-│   ├── factory.py          # LLM工厂模式
-│   ├── google.py           # Google Gemini适配器
-│   └── openai.py           # OpenAI适配器
+├── llm_adapters/          # LLM适配器（包化）
+│   ├── base.py             # 适配器基类/协议
+│   ├── factory.py          # 提供商工厂与缓存
+│   ├── google/             # Google 提供商包（native）
+│   │   ├── __init__.py
+│   │   └── chat.py         # Chat 模型适配
+│   ├── openai/             # OpenAI 提供商包（native）
+│   │   ├── __init__.py
+│   │   └── chat.py         # Chat 模型适配
+│   └── backends/
+│       └── hf/             # 通用本地推理后端（HF）
+│           ├── __init__.py
+│           └── chat.py     # 通用 HF CausalLM 适配
 ├── tools/                 # 工具集
 │   ├── __init__.py
 │   ├── calculator.py       # 计算器工具

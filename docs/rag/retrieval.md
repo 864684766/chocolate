@@ -135,7 +135,7 @@ app/core/tokenization/
 {
   "retrieval": {
     "rerank": {
-      "model_name": "BAAI/bge-reranker-base",
+      "model": "BAAI/bge-reranker-base",
       "top_n": 10,
       "timeout_ms": 800,
       "batch_size": 16
@@ -146,7 +146,7 @@ app/core/tokenization/
 
 字段说明：
 
-- model_name：重排模型名称（示例为 BGE 系列；也可用 `cross-encoder/ms-marco-*`）。
+- model：重排模型名称或本地路径（示例为 BGE 系列；也可用 `cross-encoder/ms-marco-*`）。
 - top_n：重排后保留的候选数（建议与召回 top_k 对齐或略小）。
 - timeout_ms：重排超时（用于控制端到端时延）。
 - batch_size：重排推理批大小（默认 16；按显存/内存与吞吐取值 8–64 压测确定）。
@@ -256,3 +256,34 @@ app/rag/retrieval/
 说明：
 
 - 该清洗仅作用于查询字符串，入库侧不重复清洗；若将来升级规则，建议通过离线重建索引而非在线改库内文本。
+
+## 编排提示词配置（prompts.retrieval）
+
+目的：将 `/retrieval/search` 生成阶段的提示词从代码中抽离为配置，便于按场景/语言/模型调整。
+
+配置位置：`config/app_config.json` → `prompts.retrieval`
+
+示例：
+
+```json
+{
+  "prompts": {
+    "retrieval": {
+      "system": "你是一个中文助理，请基于提供的上下文回答。若信息不足，请明确说明。",
+      "user_template": "问题：{query}\n\n上下文：\n{context}"
+    }
+  }
+}
+```
+
+字段说明：
+
+- system：作为第一条 system 消息注入模型，设定回答风格与安全边界。
+- user_template：用户消息模板，支持占位符 `{query}` 与 `{context}`，分别由用户查询与检索拼接上下文替换。
+
+运行时生效点：`app/rag/retrieval/orchestrator.py::_generate`
+
+注意：
+
+- 角色集合遵循各模型的 `chat_template`（通用安全组合：system、user、assistant）。
+- 若模板中出现未定义角色（如 tool/function），请先验证对应模型的 `tokenizer_config.json` 中 `chat_template` 是否支持。

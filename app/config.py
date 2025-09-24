@@ -48,7 +48,7 @@ class ConfigManager:
         """获取配置，支持AI类型和提供商参数"""
         if provider:
             cur_provider = provider.lower()
-            model = ai_type.lower().replace('_', '-') if ai_type else self._config_data["llm"]["default_model"]
+            model = ai_type if ai_type else self._config_data["llm"]["default_model"]
         elif ai_type:
             # 通过别名查找模型
             found = self._find_model_by_alias(ai_type.lower())
@@ -62,7 +62,7 @@ class ConfigManager:
             cur_provider = self._config_data["llm"]["default_provider"]
             model = self._config_data["llm"]["default_model"]
 
-        # 获取API密钥和模型配置 - 从providers配置中读取
+        # 获取API密钥和模型配置 - 从providers配置中读取（统一字段 model）
         api_key = None
         temperature = self._config_data["llm"]["default_temperature"]
 

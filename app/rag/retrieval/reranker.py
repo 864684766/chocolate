@@ -24,8 +24,8 @@ class CrossEncoderReranker:
     方法体不超过 20 行；真实模型推理请拆分到独立辅助类/模块。
     """
 
-    def __init__(self, model_name: str | None = None):
-        self.model_name = model_name or "BAAI/bge-reranker-base"
+    def __init__(self, model: str | None = None):
+        self.model = model or "BAAI/bge-reranker-base"
         self._model = None
         self.logger = get_logger(__name__)
 
@@ -34,9 +34,9 @@ class CrossEncoderReranker:
             return
         try:
             from sentence_transformers import CrossEncoder  # type: ignore
-            self._model = CrossEncoder(self.model_name)
+            self._model = CrossEncoder(self.model)
         except Exception as e:
-            self.logger.warning(f"CrossEncoder load failed ({self.model_name}): {e}; fallback to score sort.")
+            self.logger.warning(f"CrossEncoder load failed ({self.model}): {e}; fallback to score sort.")
             self._model = None
 
     def rerank(self, items: List[RetrievedItem], top_n: int = 10, query: Optional[str] = None) -> List[RetrievedItem]:
