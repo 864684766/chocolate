@@ -50,13 +50,24 @@ class RetrievalOrchestrator:
         score_th = float(opts.get("score_threshold", 0.0))
         max_preview = int(opts.get("max_preview", 3))
 
-        items = self._retrieve(query, top_k, score_th)
+        # 构建严格 where（零放宽，白名单校验）
+        from .utils.where_builder import WhereBuilder
+        wb = WhereBuilder()
+        applied_where = wb.build(query)
+
+        items = self._retrieve(query, top_k, score_th, applied_where)
         items = self._rerank(query, items, top_n)
         preview = self._build_preview(items, max_preview)
 
         # 始终执行生成阶段（如需仅预览，可在上层另设接口）
         content = self._generate(query, items, opts)
-        return {"preview": preview, "content": content, "items": items}
+        return {
+            "preview": preview,
+            "content": content,
+            "items": items,
+            "applied_where": applied_where,
+            "matched_count": len(items),
+        }
 
     def _cfg_rerank(self) -> Dict[str, Any]:
         """
@@ -68,7 +79,7 @@ class RetrievalOrchestrator:
         return (self.cfg.get_config("retrieval") or {}).get("rerank", {})
 
     @staticmethod
-    def _retrieve(query: str, top_k: int, score_th: float) -> List[RetrievedItem]:
+    def _retrieve(query: str, top_k: int, score_th: float, where: Optional[Dict[str, Any]]) -> List[RetrievedItem]:
         """
         执行向量召回。
 
@@ -81,7 +92,7 @@ class RetrievalOrchestrator:
         - List[RetrievedItem]: 召回的候选项列表。
         """
         retriever = VectorRetriever()
-        q = RetrievalQuery(query=query, where=None, top_k=top_k, score_threshold=score_th)
+        q = RetrievalQuery(query=query, where=where, top_k=top_k, score_threshold=score_th)
         return retriever.search(q).items
 
     def _rerank(self, query: str, items: List[RetrievedItem], top_n: int) -> List[RetrievedItem]:

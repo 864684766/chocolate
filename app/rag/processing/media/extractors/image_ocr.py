@@ -90,10 +90,9 @@ class ImageOCRExtractor(MediaExtractor):
         Returns:
             Dict[str, Any]: 包含以下键的字典：
                 - ocr_results (List[Dict]): OCR识别的文本结果列表
-                - image_meta (Dict): 图像处理元数据
                 - captions (List[str], 可选): 视觉理解生成的描述（回退时）
         """
-        ocr_payload: Dict[str, Any] = {"ocr_results": [], "image_meta": {}}
+        ocr_payload: Dict[str, Any] = {"ocr_results": []}
  
         if self._ocr_engines:
             for engine in self._ocr_engines:
@@ -163,14 +162,7 @@ class ImageOCRExtractor(MediaExtractor):
                     "height": max(y_coordinates) - min(y_coordinates),
                     "bbox": bbox
                 })
-        return {
-            "ocr_results": ocr_results,
-            "image_meta": {
-                "ocr_engine": "easyocr",
-                "image_format": meta.get("image_format", "auto"),
-                "total_texts": len(ocr_results)
-            }
-        }
+        return {"ocr_results": ocr_results}
     
     def _extract_with_paddleocr(self, image_bytes: bytes, meta: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -222,14 +214,7 @@ class ImageOCRExtractor(MediaExtractor):
                         "height": max(y_coordinates) - min(y_coordinates),
                         "bbox": bbox
                     })
-        return {
-            "ocr_results": ocr_results,
-            "image_meta": {
-                "ocr_engine": "paddleocr",
-                "image_format": meta.get("image_format", "auto"),
-                "total_texts": len(ocr_results)
-            }
-        }
+        return {"ocr_results": ocr_results}
     
     def _extract_with_tesseract(self, image_bytes: bytes, meta: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -271,11 +256,4 @@ class ImageOCRExtractor(MediaExtractor):
             "height": img.height,
             "bbox": [[0, 0], [img.width, 0], [img.width, img.height], [0, img.height]]
         }] if text.strip() else []
-        return {
-            "ocr_results": ocr_results,
-            "image_meta": {
-                "ocr_engine": "tesseract",
-                "image_format": meta.get("image_format", "auto"),
-                "total_texts": len(ocr_results)
-            }
-        }
+        return {"ocr_results": ocr_results}

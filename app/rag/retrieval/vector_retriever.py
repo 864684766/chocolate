@@ -89,6 +89,12 @@ class VectorRetriever:
             items.append(RetrievedItem(id=_id, text=doc, score=score, metadata=meta_dict))
 
         latency_ms = int((time.time() - t0) * 1000)
-        return RetrievalResult(items=items, latency_ms=latency_ms, debug_info={"source": "vector"})
+        return RetrievalResult(
+            items=items,
+            latency_ms=latency_ms,
+            debug_info={"source": "vector"},
+            applied_where=q.where,
+            matched_count=len(items),
+        )
 
 

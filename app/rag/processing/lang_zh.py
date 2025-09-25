@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 import re
 
 from .interfaces import LanguageProcessor
+from app.config import get_config_manager
 
 
 class ChineseProcessor(LanguageProcessor):
@@ -15,11 +16,28 @@ class ChineseProcessor(LanguageProcessor):
     - 可配置：支持多种分块策略和参数
     """
 
-    def __init__(self, chunk_size: int = 800, overlap: int = 150, 
-                 use_langchain: bool = True) -> None:
-        self.chunk_size = chunk_size
-        self.overlap = overlap
-        self.use_langchain = use_langchain
+    def __init__(self, chunk_size: int = None, overlap: int = None, 
+                 use_langchain: bool = None) -> None:
+        """
+        初始化中文处理器
+        
+        Args:
+            chunk_size: 分块大小，如果为None则从配置中读取
+            overlap: 重叠大小，如果为None则从配置中读取  
+            use_langchain: 是否使用LangChain，如果为None则从配置中读取
+        """
+        # 获取配置管理器
+        config_manager = get_config_manager()
+        chinese_config = config_manager.get_chinese_processing_config()
+        chunking_config = chinese_config.get("chunking", {})
+        
+        # 使用传入参数或配置中的默认值
+        self.chunk_size = chunk_size if chunk_size is not None else chunking_config.get("default_chunk_size", 800)
+        self.overlap = overlap if overlap is not None else chunking_config.get("default_overlap", 150)
+        self.use_langchain = use_langchain if use_langchain is not None else chunking_config.get("use_langchain", True)
+        
+        # 从配置中获取其他参数
+        self._config = chinese_config
 
     def clean(self, text: str) -> str:
         """
@@ -31,12 +49,19 @@ class ChineseProcessor(LanguageProcessor):
         if not text:
             return ""
         
+        # 从配置中获取文本清洗参数
+        text_cleaning_config = self._config.get("text_cleaning", {})
+        whitespace_pattern = text_cleaning_config.get("normalize_whitespace_pattern", "[ \\t]+")
+        whitespace_replacement = text_cleaning_config.get("normalize_whitespace_replacement", " ")
+        newlines_pattern = text_cleaning_config.get("normalize_newlines_pattern", "\\n\\s*\\n\\s*\\n+")
+        newlines_replacement = text_cleaning_config.get("normalize_newlines_replacement", "\n\n")
+        
         # 统一换行符
         t = text.replace("\r\n", "\n").replace("\r", "\n")
         
         # 归一化空白字符（保留单个换行符）
-        t = re.sub(r"[ \t]+", " ", t)  # 多个空格/制表符 -> 单个空格
-        t = re.sub(r"\n\s*\n\s*\n+", "\n\n", t)  # 多个连续换行 -> 双换行
+        t = re.sub(whitespace_pattern, whitespace_replacement, t)  # 多个空格/制表符 -> 单个空格
+        t = re.sub(newlines_pattern, newlines_replacement, t)  # 多个连续换行 -> 双换行
         
         # 全角转半角（可选，根据需求调整）
         # t = self._normalize_fullwidth(t)
@@ -65,8 +90,9 @@ class ChineseProcessor(LanguageProcessor):
         try:
             from langchain.text_splitter import RecursiveCharacterTextSplitter
             
-            # 中文友好的分隔符顺序
-            separators = [
+            # 从配置中获取中文友好的分隔符顺序
+            chunking_config = self._config.get("chunking", {})
+            separators = chunking_config.get("separators", [
                 "\n\n",      # 段落分隔
                 "\n",        # 行分隔
                 "。",        # 中文句号
@@ -76,7 +102,7 @@ class ChineseProcessor(LanguageProcessor):
                 "，",        # 中文逗号
                 " ",         # 空格
                 ""           # 字符级别（最后手段）
-            ]
+            ])
             
             splitter = RecursiveCharacterTextSplitter(
                 chunk_size=self.chunk_size,
@@ -125,21 +151,11 @@ class ChineseProcessor(LanguageProcessor):
         
         return chunks
 
-    @staticmethod
-    def _split_sentences(text: str) -> List[str]:
+    def _split_sentences(self, text: str) -> List[str]:
         """按中文标点符号分割句子"""
-        # 中文标点符号
-        sentence_endings = r'[。！？；]'
+        # 从配置中获取中文标点符号模式
+        sentence_splitting_config = self._config.get("sentence_splitting", {})
+        sentence_endings = sentence_splitting_config.get("sentence_endings_pattern", "[。！？；]")
         return re.split(f'({sentence_endings})', text)
-
-    def extract_meta(self) -> Dict[str, Any]:
-        """提取处理器的元数据"""
-        return {
-            "processor_type": "ChineseProcessor",
-            "chunk_size": self.chunk_size,
-            "overlap": self.overlap,
-            "use_langchain": self.use_langchain,
-            "language": "zh"
-        }
 
 

@@ -29,7 +29,8 @@ def build_metadata_from_meta(meta: Dict[str, Any]) -> Dict[str, Primitive]:
     - 旧版：List[str]
     - 新版：List[{field: str, type: str}]
     """
-    cfg = get_config_manager().get_config("vectorization")
+    # 白名单归属调整：从 vectorization 迁移到 metadata 配置节
+    cfg = get_config_manager().get_config("metadata") or {}
     wl_raw = cfg.get("metadata_whitelist", [])
     types_map: Dict[str, str] = {}
     if wl_raw and isinstance(wl_raw[0], dict):
@@ -57,7 +58,7 @@ def build_metadata_from_meta(meta: Dict[str, Any]) -> Dict[str, Primitive]:
                     num = float(str(v).strip())
                     # 尽量以 int 写入
                     out[k] = int(num) if num.is_integer() else num  # type: ignore[assignment]
-                except Exception:
+                except (ValueError, TypeError):
                     continue
         elif t == "boolean":
             if isinstance(v, bool):
@@ -70,6 +71,20 @@ def build_metadata_from_meta(meta: Dict[str, Any]) -> Dict[str, Primitive]:
             sv = str(v)
             if sv != "":
                 out[k] = sv  # type: ignore[assignment]
+        elif t == "array":
+            # Chroma 元数据建议使用基础类型；数组统一序列化为逗号分隔的字符串
+            try:
+                if isinstance(v, (list, tuple)):
+                    items: List[str] = [str(x).strip() for x in v if str(x).strip()]
+                    if items:
+                        out[k] = ",".join(items)  # type: ignore[assignment]
+                else:
+                    # 兜底：单值直接转字符串
+                    sv = str(v).strip()
+                    if sv:
+                        out[k] = sv  # type: ignore[assignment]
+            except (TypeError, ValueError):
+                continue
         else:
             # 无类型声明时，接受基础类型且非空
             if _is_primitive(v):
@@ -111,7 +126,8 @@ def normalize_meta_for_vector(meta: Dict[str, Any]) -> Dict[str, Primitive]:
     - `media_type` 若缺失，默认 "text"；
     - 复用展开逻辑，将图片/边界信息拉平。
     """
-    cfg = get_config_manager().get_config("vectorization")
+    # 白名单归属调整：从 vectorization 迁移到 metadata 配置节
+    cfg = get_config_manager().get_config("metadata") or {}
     # 支持两种写法：旧版 List[str] 与新版 List[{field,type}]
     wl_raw = cfg.get("metadata_whitelist", [])
     if wl_raw and isinstance(wl_raw[0], dict):

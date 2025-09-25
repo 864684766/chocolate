@@ -57,28 +57,6 @@
     "model": "D:/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     "device": "auto",
     "batch_size": 32,
-    "metadata_whitelist": [
-      { "field": "doc_id", "type": "string" },
-      { "field": "source", "type": "string" },
-      { "field": "filename", "type": "string" },
-      { "field": "content_type", "type": "string" },
-      { "field": "media_type", "type": "string" },
-      { "field": "chunk_index", "type": "number" },
-      { "field": "chunk_type", "type": "string" },
-      { "field": "chunk_size", "type": "number" },
-      { "field": "created_at", "type": "string" },
-      { "field": "page_number", "type": "number" },
-      { "field": "start_pos", "type": "number" },
-      { "field": "end_pos", "type": "number" },
-      { "field": "region_index", "type": "number" },
-      { "field": "ocr_engine", "type": "string" },
-      { "field": "image_format", "type": "string" },
-      { "field": "total_texts", "type": "number" },
-      { "field": "min_x", "type": "number" },
-      { "field": "max_x", "type": "number" },
-      { "field": "min_y", "type": "number" },
-      { "field": "max_y", "type": "number" }
-    ],
     "database": {
       "host": "124.71.135.104",
       "port": 8000,
@@ -367,6 +345,109 @@
       "api_key": "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",
       "project": "chocolate-dev",
       "endpoint": "https://api.smith.langchain.com"
+    }
+  },
+
+  "language_processing": {
+    "chinese": {
+      "chunking": {
+        "default_chunk_size": 800,
+        "default_overlap": 150,
+        "use_langchain": true,
+        "separators": ["\n\n", "\n", "。", "！", "？", "；", "，", " ", ""]
+      },
+      "text_cleaning": {
+        "normalize_whitespace_pattern": "[ \\t]+",
+        "normalize_whitespace_replacement": " ",
+        "normalize_newlines_pattern": "\\n\\s*\\n\\s*\\n+",
+        "normalize_newlines_replacement": "\n\n"
+      },
+      "sentence_splitting": {
+        "sentence_endings_pattern": "[。！？；]"
+      }
+    }
+  },
+
+  "metadata": {
+    "default_language": "zh",
+    "language_detection": {
+      "chinese_threshold": 0.3,
+      "min_text_length": 10,
+      "fallback_language": "zh",
+      "aliases": {
+        "中文,简体中文,zh,zh_cn": "zh",
+        "英文,english,en": "en"
+      }
+    },
+    "metadata_whitelist": [
+      { "field": "doc_id", "type": "string" },
+      { "field": "source", "type": "string" },
+      { "field": "filename", "type": "string" },
+      { "field": "content_type", "type": "string" },
+      { "field": "media_type", "type": "string" },
+      { "field": "lang", "type": "string" },
+      { "field": "tags", "type": "array" },
+      { "field": "keyphrases", "type": "array" },
+      { "field": "created_at", "type": "string" },
+      { "field": "quality_score", "type": "number" }
+    ],
+    "media_type_mapping": {
+      "by_extension": {
+        "pdf": "pdf",
+        "doc": "document",
+        "docx": "document",
+        "txt": "text",
+        "md": "text",
+        "png": "image",
+        "jpg": "image",
+        "jpeg": "image",
+        "gif": "image",
+        "bmp": "image",
+        "webp": "image",
+        "mp4": "video",
+        "avi": "video",
+        "mov": "video",
+        "mkv": "video",
+        "mp3": "audio",
+        "wav": "audio",
+        "flac": "audio"
+      },
+      "by_content_type": {
+        "image/": "image",
+        "video/": "video",
+        "audio/": "audio",
+        "application/pdf": "pdf",
+        "text/": "text"
+      },
+      "default": "text",
+      "by_keyword": {
+        "文本,文档,text": "text",
+        "图片,图像,image": "image",
+        "视频,video": "video",
+        "音频,audio": "audio",
+        "pdf": "pdf"
+      }
+    },
+    "required_fields": {
+      "source": "unknown",
+      "media_type": "text"
+    },
+    "keywords": {
+      "method": "textrank",
+      "topk": 10,
+      "lang": "auto",
+      "stopwords": { "path": "D:/test/chocolate/docs/stopWord.txt" }
+    },
+    "quality": {
+      "min_len": 20,
+      "sat_len": 200,
+      "weights": { "garbled": 0.4, "valid": 0.2, "length": 0.2, "ocr": 0.2 },
+      "observability": {
+        "enabled": true,
+        "threshold": 0.6,
+        "alert_ratio": 0.2,
+        "sample_rate": 0.01
+      }
     }
   }
 }

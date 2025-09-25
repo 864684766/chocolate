@@ -41,6 +41,7 @@ optimum = "^1.27.0"
 sentencepiece = "^0.2.1"
 sacremoses = "^0.1.1"
 watchdog = "^6.0.0"
+jieba = "^0.42.1"
 
 
 [build-system]

@@ -32,7 +32,7 @@ app/rag/vectorization/
 
 2. 元数据规范化 `normalize_meta_for_vector(meta)`
 
-- 只保留 `vectorization.metadata_whitelist` 中的键；缺省值按类型自动补齐
+- 只保留 `metadata.metadata_whitelist` 中的键；缺省值按类型自动补齐
 - 配置格式：`[{ field: string, type: string }]`，示例见下；全局约定 meta 为扁平结构（不做嵌套展开）
 
 3. 稳定 ID、去重与 upsert
@@ -47,7 +47,7 @@ app/rag/vectorization/
 
 ## 配置（app_config.json）
 
-位置：`config/app_config.json > vectorization`
+位置：`config/app_config.json > metadata`
 
 ```jsonc
 {
@@ -55,33 +55,26 @@ app/rag/vectorization/
     "model_name": "D:/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     "device": "auto",
     "batch_size": 32,
+    "database": {
+      "host": "124.71.135.104",
+      "port": 8000,
+      "collection_name": "documents"
+    }
+  },
+  {
+    ...,
     "metadata_whitelist": [
       { "field": "doc_id", "type": "string" },
       { "field": "source", "type": "string" },
       { "field": "filename", "type": "string" },
       { "field": "content_type", "type": "string" },
       { "field": "media_type", "type": "string" },
-      { "field": "chunk_index", "type": "number" },
-      { "field": "chunk_type", "type": "string" },
-      { "field": "chunk_size", "type": "number" },
+      { "field": "lang", "type": "string" },
+      { "field": "tags", "type": "array" },
+      { "field": "keyphrases", "type": "array" },
       { "field": "created_at", "type": "string" },
-      { "field": "page_number", "type": "number" },
-      { "field": "start_pos", "type": "number" },
-      { "field": "end_pos", "type": "number" },
-      { "field": "region_index", "type": "number" },
-      { "field": "ocr_engine", "type": "string" },
-      { "field": "image_format", "type": "string" },
-      { "field": "total_texts", "type": "number" },
-      { "field": "min_x", "type": "number" },
-      { "field": "max_x", "type": "number" },
-      { "field": "min_y", "type": "number" },
-      { "field": "max_y", "type": "number" }
+      { "field": "quality_score", "type": "number" }
     ],
-    "database": {
-      "host": "124.71.135.104",
-      "port": 8000,
-      "collection_name": "documents"
-    }
   }
 }
 ```
@@ -128,13 +121,12 @@ app/rag/vectorization/
       - 本地：`host: "localhost"`（就在你电脑上）
       - 远程：`host: "124.71.135.104"`（在别的服务器上）
 
-- 元数据白名单（用于 where 过滤）
-  - `metadata_whitelist`：控制哪些字段会写入向量库的 metadatas，必须全部是基础类型。
-  - 典型默认值（可按需裁剪/扩展）：
-    - 通用：`doc_id, source, filename, content_type, media_type, chunk_index, chunk_type, chunk_size, created_at`
-    - 文档/PDF：`page_number, start_pos, end_pos`
-    - 图片：`region_index, ocr_engine, image_format, total_texts, min_x, max_x, min_y, max_y`
-  - 修改方式：`config/app_config.json > vectorization.metadata_whitelist`
+– 元数据白名单（用于 where 过滤）
+
+- `metadata_whitelist`：控制哪些字段会写入向量库的 metadatas，必须全部是基础类型（str/int/float/bool/空）。
+- 典型默认值（与当前仓库配置一致，可按需裁剪/扩展）：
+  - 通用：`doc_id, source, filename, content_type, media_type, lang, tags, keyphrases, created_at, quality_score`
+- 修改方式：`config/app_config.json > metadata.metadata_whitelist`
 
 备注：集合命名/元数据/ID/维度稳定等工程实践，见《向量库工程化与扩展实践（ChromaDB）》：`docs/rag/vector_store_practices.md`。
 

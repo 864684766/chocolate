@@ -8,6 +8,7 @@ from .lang_zh import ChineseProcessor
 from .media.chunking import ChunkingStrategyFactory
 from .media.extractors import MediaExtractorFactory
 from .utils.chunking import decide_chunk_params
+from .metadata_manager import MetadataManager
 
 
 class ProcessingPipeline:
@@ -43,6 +44,7 @@ class ProcessingPipeline:
         self.extractor = extractor or PlainTextExtractor()
         self.lang = lang_processor or ChineseProcessor()
         self.quality = quality
+        self.metadata_manager = MetadataManager()
         self.use_media_chunking = use_media_chunking
 
     def run(self, samples: List[RawSample]) -> List[ProcessedChunk]:
@@ -114,12 +116,12 @@ class ProcessingPipeline:
         parts = self.lang.chunk(cleaned)
         chunks: List[ProcessedChunk] = []
         for idx, part in enumerate(parts):
-            meta: Dict[str, Any] = dict(extracted["meta"])  # type: ignore[index]
-            # 写事实字段（不再归一化；最终由 Indexer 的 build_metadata_from_meta 兜底）
-            meta = {**meta, "chunk_index": idx, "chunk_type": "text_traditional"}
-            if self.quality:
-                meta.update(self.quality.score(part, meta))
-            chunks.append(ProcessedChunk(text=part, meta=meta))
+            # 使用元数据管理器更新元数据
+            updated_meta = self.metadata_manager.update_content_metadata(
+                part, 
+                extracted.get("meta", {})
+            )
+            chunks.append(ProcessedChunk(text=part, meta=updated_meta))
         return chunks
 
     @staticmethod

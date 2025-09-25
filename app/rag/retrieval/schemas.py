@@ -43,6 +43,8 @@ class RetrievalResult(BaseModel):
     items: List[RetrievedItem] = Field(default_factory=list)
     latency_ms: int = 0
     debug_info: Dict[str, Any] = Field(default_factory=dict)
+    applied_where: Optional[Dict[str, Any]] = Field(default=None, description="本次实际使用的 where 条件")
+    matched_count: int = Field(0, ge=0, description="命中条数（未放宽）")
 
 
 class BuiltContext(BaseModel):

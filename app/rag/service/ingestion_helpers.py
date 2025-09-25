@@ -156,8 +156,8 @@ def process_and_vectorize(samples: List[RawSample]) -> Dict[str, int]:
         Dict[str, int]: {"chunks": 分块数量, "embedded": 已向量化数量}。
     """
     from app.rag.vectorization import VectorIndexer, VectorizationConfig
-
-    pipeline = ProcessingPipeline()
+    from app.rag.processing.quality_checker import SimpleQualityAssessor
+    pipeline = ProcessingPipeline(quality=SimpleQualityAssessor())
     chunks = pipeline.run(samples)
     if not chunks:
         return {"chunks": 0, "embedded": 0}

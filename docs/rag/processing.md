@@ -34,6 +34,223 @@ app/rag/processing/
 - `MediaExtractor`：extract(RawSample)->{"text": str, "meta": {...}}
 - `QualityAssessor`：score(text, meta)->Dict[str, Any]
 
+## 元数据管理
+
+系统现在使用统一的 `MetadataManager` 来管理所有元数据操作，包括基础元数据生成、内容分析、质量评估等。
+
+### MetadataManager 功能
+
+`MetadataManager` 负责以下元数据操作：
+
+1. **基础元数据生成**：`doc_id`, `filename`, `source`, `created_at`, `media_type`
+2. **内容分析元数据**：`lang`（语言检测）, `text_len`, `keyphrases`
+3. **质量评估元数据**：`quality_score`
+4. **元数据规范化**：白名单过滤、类型转换
+
+### 统一配置结构
+
+所有元数据相关配置现在统一在 `metadata` 配置节中：
+
+```json
+{
+  "metadata": {
+    "default_language": "zh",
+    "language_detection": {
+      "enabled": true,
+      "chinese_threshold": 0.3,
+      "min_text_length": 10,
+      "fallback_language": "zh"
+    },
+    "media_type_mapping": {
+      "by_extension": {
+        "pdf": "pdf",
+        "doc": "document",
+        "docx": "document",
+        "txt": "text",
+        "md": "text",
+        "png": "image",
+        "jpg": "image",
+        "jpeg": "image",
+        "gif": "image",
+        "bmp": "image",
+        "webp": "image",
+        "mp4": "video",
+        "avi": "video",
+        "mov": "video",
+        "mkv": "video",
+        "mp3": "audio",
+        "wav": "audio",
+        "flac": "audio"
+      },
+      "by_content_type": {
+        "image/": "image",
+        "video/": "video",
+        "audio/": "audio",
+        "application/pdf": "pdf",
+        "text/": "text"
+      },
+      "default": "text"
+    },
+    "required_fields": {
+      "source": "unknown",
+      "media_type": "text"
+    },
+    "keywords": {
+      "method": "textrank",
+      "topk": 10,
+      "lang": "auto",
+      "stopwords": { "path": "D:/test/chocolate/docs/stopWord.txt" }
+    },
+    "quality": {
+      "min_len": 20,
+      "sat_len": 200,
+      "weights": { "garbled": 0.4, "valid": 0.2, "length": 0.2, "ocr": 0.2 },
+      "observability": {
+        "enabled": true,
+        "threshold": 0.6,
+        "alert_ratio": 0.2,
+        "sample_rate": 0.01
+      }
+    }
+  }
+}
+```
+
+### 配置说明
+
+**基础配置**：
+
+- `default_language`: 默认语言代码
+- `required_fields`: 必需字段的默认值
+
+**语言检测配置**：
+
+- `chinese_threshold`: 中文字符比例阈值
+  - 含义：按实现，统计文本中中文字符数量与有效字符数量（字母[a-zA-Z]或中文字符[\u4e00-\u9fff]）之比；当该比例 > chinese_threshold 时判定为中文（"zh"），否则为英文（"en"）。
+  - 取值范围：0.0 ~ 1.0
+  - 当前实现要点（与代码对齐）：
+    - 短文本保护：当 `len(text.strip()) < 10` 时，不进行比例计算，直接返回 `default_language`（当前默认 `zh`）。注意：这一阈值目前在代码中是固定值 10，尚未读取配置。
+    - 空/无效文本处理：当有效字符总数为 0 时，直接返回 `default_language`。
+    - 有效字符定义：仅统计字母与中文字符；标点、空白、表情等不计入有效字符总数。
+  - 推荐值：
+    - 中文为主的数据集：0.20 ~ 0.35（建议默认 0.30）
+    - 中英均衡或混排内容：0.30 ~ 0.50
+    - 英文为主的数据集：0.40 ~ 0.60
+  - 调参建议：
+    - 误判为英文较多：适当下调阈值（例：0.30 → 0.25）
+    - 误判为中文较多：适当上调阈值（例：0.30 → 0.40）
+    - 标题/短句等极短文本：可考虑后续将短文本阈值改为配置项，或在上游对短文本跳过检测
+- `min_text_length`: 最小文本长度
+  - 说明：已由代码读取并生效（`MetadataManager._detect_language`）。当文本长度小于该值时直接返回回退语言。
+- `fallback_language`: 检测失败时的回退语言
+  - 说明：已由代码读取并生效。用于短文本或有效字符为 0 的回退；若缺省则回退到 `default_language`。
+
+**媒体类型映射配置**：
+
+- `by_extension`: 基于文件扩展名的映射
+- `by_content_type`: 基于内容类型的映射
+- `default`: 默认媒体类型
+
+**关键词提取配置**：
+
+- `method`: 提取方法（textrank/light/keybert/none）
+- `topk`: 最大关键词数量
+- `lang`: 处理语言
+- `stopwords.path`: 停用词文件路径
+
+**质量评估配置**：
+
+- `min_len/sat_len`: 长度阈值
+- `weights`: 各维度权重
+- `observability`: 观测和日志配置
+
+### 使用示例
+
+```python
+from app.rag.processing.metadata_manager import MetadataManager
+
+# 创建元数据管理器
+manager = MetadataManager()
+
+# 创建完整元数据
+meta = manager.create_metadata(
+    text="这是测试文本",
+    filename="test.pdf",
+    content_type="application/pdf",
+    source="manual_upload"
+)
+
+# 更新内容元数据
+updated_meta = manager.update_content_metadata(
+    "更新后的文本内容",
+    meta
+)
+```
+
+## 质量评估配置
+
+质量评估器 (`SimpleQualityAssessor`) 通过配置文件进行参数调整，配置位置：`metadata.quality`
+
+### 配置结构
+
+```json
+{
+  "metadata": {
+    "quality": {
+      "min_len": 20,
+      "sat_len": 200,
+      "weights": {
+        "garbled": 0.4,
+        "valid": 0.2,
+        "length": 0.2,
+        "ocr": 0.2
+      },
+      "observability": {
+        "enabled": true,
+        "threshold": 0.6,
+        "alert_ratio": 0.2,
+        "sample_rate": 0.01
+      }
+    }
+  }
+}
+```
+
+### 配置参数说明
+
+**基础参数**：
+
+- `min_len`: 最小文本长度阈值（字符数），低于此长度的文本长度得分为 0.0
+- `sat_len`: 满意文本长度阈值（字符数），达到或超过此长度的文本长度得分为 1.0
+
+**权重配置**：
+
+- `garbled`: 乱码得分权重，基于不可打印字符比例计算
+- `valid`: 有效字符比例权重，基于字母数字和标点符号比例计算
+- `length`: 长度得分权重，基于文本长度计算
+- `ocr`: OCR 置信度权重，基于 OCR 识别的平均置信度计算
+- 注意：当 OCR 置信度缺失时，权重会自动归一化到其他三个维度
+
+**观测配置**：
+
+- `enabled`: 是否启用质量观测功能
+- `threshold`: 质量得分阈值，低于此值的样本会被记录日志
+- `alert_ratio`: 告警比例阈值（当前未使用，预留给监控系统）
+- `sample_rate`: 采样率，控制低质量样本的日志记录频率（0.01 = 1%）
+
+### 使用示例
+
+```python
+from app.rag.processing.quality_checker import SimpleQualityAssessor
+
+# 使用默认配置
+assessor = SimpleQualityAssessor()
+
+# 评估文本质量
+result = assessor.score("这是一段测试文本", {"source": "test"})
+print(f"质量得分: {result['quality_score']}")
+```
+
 ## 分块参数决策（新）
 
 为适配不同媒体与上下文窗口，已将"分块参数决策"独立为处理工具模块：`app/rag/processing/utils/chunking.py`。
@@ -100,6 +317,87 @@ strategy = ChunkingStrategyFactory.create_strategy(
 - 分词：jieba + 自定义词典
 - 标点与空白归一化、繁简转换（opencc）
 - 章节/小节/标题保留为元数据，利于重排与引用
+
+### 中文处理器配置
+
+中文处理器 (`lang_zh.py`) 现在支持通过配置文件进行参数调整：
+
+#### 配置结构
+
+```json
+{
+  "language_processing": {
+    "chinese": {
+      "chunking": {
+        "default_chunk_size": 800,
+        "default_overlap": 150,
+        "use_langchain": true,
+        "separators": ["\n\n", "\n", "。", "！", "？", "；", "，", " ", ""]
+      },
+      "text_cleaning": {
+        "normalize_whitespace_pattern": "[ \\t]+",
+        "normalize_whitespace_replacement": " ",
+        "normalize_newlines_pattern": "\\n\\s*\\n\\s*\\n+",
+        "normalize_newlines_replacement": "\n\n"
+      },
+      "sentence_splitting": {
+        "sentence_endings_pattern": "[。！？；]"
+      },
+      "metadata": {
+        "processor_type": "ChineseProcessor",
+        "language": "zh"
+      }
+    }
+  }
+}
+```
+
+#### 配置参数说明
+
+**chunking 分块配置**：
+
+- `default_chunk_size`: 默认分块大小（字符数）
+- `default_overlap`: 默认重叠大小（字符数）
+- `use_langchain`: 是否使用 LangChain 智能分块器
+- `separators`: 分块分隔符优先级列表，按优先级从高到低排列
+
+**text_cleaning 文本清洗配置**：
+
+- `normalize_whitespace_pattern`: 空白字符归一化正则表达式
+- `normalize_whitespace_replacement`: 空白字符替换字符串
+- `normalize_newlines_pattern`: 换行符归一化正则表达式
+- `normalize_newlines_replacement`: 换行符替换字符串
+
+**sentence_splitting 句子分割配置**：
+
+- `sentence_endings_pattern`: 中文句子结束标点符号正则表达式
+
+**metadata 元数据配置**：
+
+- `processor_type`: 处理器类型标识
+- `language`: 语言标识
+
+#### 使用示例
+
+```python
+from app.rag.processing.lang_zh import ChineseProcessor
+
+# 使用默认配置
+processor = ChineseProcessor()
+
+# 覆盖特定参数
+processor = ChineseProcessor(chunk_size=1000, overlap=200)
+
+# 禁用 LangChain
+processor = ChineseProcessor(use_langchain=False)
+```
+
+#### 配置化的优势
+
+1. **灵活性**：无需修改代码即可调整处理参数
+2. **可维护性**：所有配置集中管理，便于维护
+3. **可扩展性**：支持不同环境使用不同配置
+4. **向后兼容**：保持原有 API 不变，参数可选
 
 ## 媒体处理配置
 

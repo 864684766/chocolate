@@ -259,6 +259,197 @@ app/rag/retrieval/
 
 ## 编排提示词配置（prompts.retrieval）
 
+## 元数据与过滤（白名单与关键词）
+
+本项目采用“精简白名单（9 项）”，聚焦可过滤与可审计字段；入库与检索共用同一套关键词抽取逻辑，保证 where 过滤一致性。
+
+配置示例：
+
+```json
+"vectorization": {
+  "metadata_whitelist": [
+    { "field": "doc_id", "type": "string" },
+    { "field": "source", "type": "string" },
+    { "field": "filename", "type": "string" },
+    { "field": "content_type", "type": "string" },
+    { "field": "media_type", "type": "string" },
+    { "field": "lang", "type": "string" },
+    { "field": "tags", "type": "array" },
+    { "field": "keyphrases", "type": "array" },
+    { "field": "created_at", "type": "string" },
+    { "field": "text_len", "type": "number" },
+    { "field": "too_short", "type": "boolean" }
+  ]
+}
+```
+
+字段说明：
+
+- doc_id：文档/片段唯一标识（溯源）
+- source：数据来源（系统/目录/库）
+- filename：原始文件名（定位与展示）
+- content_type：MIME 类型（application/pdf、text/markdown、image/png…）
+- media_type：模态（text|image|audio|video）
+- lang：语言（zh|en…）
+- tags：业务标签（人工/规则/模型）
+- keyphrases：关键词（TextRank 抽取）
+- created_at：创建/入库时间（ISO8601）
+- text_len：文本长度（用于质量过滤）
+- too_short：是否过短（用于质量过滤）
+
+关键词抽取参数（ingestion.metadata.keywords）：
+
+```json
+"ingestion": {
+  "metadata": {
+    "keywords": {
+      "method": "textrank",
+      "topk": 10,
+      "lang": "auto",
+      "stopwords": { "path": "" }
+    }
+  }
+}
+```
+
+统一服务：`app/rag/service/keywords_service.py`（接口：`extract_keyphrases(text, lang="zh", topk=10, method="textrank")`）。
+
+字段说明：
+
+- method：关键词抽取方法。
+  - textrank：基于 TextRank 的中量方案（中文友好，默认）
+  - light：分词 + 去停用词 + 频次/TF‑IDF 的轻量方案
+  - keybert：向量/嵌入方案（性能较慢，当前实现回退为 light 占位）
+  - none：关闭关键词抽取
+- topk：抽取关键词的最大数量（建议 5–15）。
+- lang：处理语言（auto/zh/en）。auto 将按调用方传入或默认值决定语言路径。
+- stopwords.path：停用词文件路径（UTF‑8，每行一词，支持以 # 开头的注释）。若留空则不做停用词过滤。
+
+质量评分配置（ingestion.metadata.quality）：
+
+```json
+"ingestion": {
+  "metadata": {
+    "quality": {
+      "min_len": 20,
+      "sat_len": 200,
+      "weights": { "garbled": 0.4, "valid": 0.2, "length": 0.2, "ocr": 0.2 },
+      "observability": {
+        "enabled": true,
+        "threshold": 0.6,
+        "alert_ratio": 0.2,
+        "sample_rate": 0.01
+      }
+    }
+  }
+}
+```
+
+**配置参数详细说明**：
+
+配置位置：`metadata.quality`
+
+- **min_len**: 最小文本长度阈值（字符数），低于此长度的文本长度得分为 0.0
+- **sat_len**: 满意文本长度阈值（字符数），达到或超过此长度的文本长度得分为 1.0
+- **weights**: 质量评估各维度权重配置
+  - `garbled`: 乱码得分权重，基于不可打印字符比例计算
+  - `valid`: 有效字符比例权重，基于字母数字和标点符号比例计算
+  - `length`: 长度得分权重，基于文本长度计算
+  - `ocr`: OCR 置信度权重，基于 OCR 识别的平均置信度计算
+  - 注意：当 OCR 置信度缺失时，权重会自动归一化到其他三个维度
+- **observability**: 质量观测与采样日志配置
+  - `enabled`: 是否启用质量观测功能
+  - `threshold`: 质量得分阈值，低于此值的样本会被记录日志
+  - `alert_ratio`: 告警比例阈值（当前未使用，预留给监控系统）
+  - `sample_rate`: 采样率，控制低质量样本的日志记录频率（0.01 = 1%）
+
+where 过滤示例：
+
+```json
+{
+  "media_type": { "$eq": "text" },
+  "lang": { "$eq": "zh" },
+  "created_at": { "$gte": "2025-01-01T00:00:00Z" },
+  "tags": { "$contains": "发票" },
+  "keyphrases": { "$contains": "报销" }
+}
+```
+
+## 元数据 where 过滤与自动推断（WhereBuilder）
+
+系统在编排层内置 WhereBuilder，使用户仅通过自然语言即可得到受限的元数据过滤：
+
+- 输入：`/retrieval/search` 仅接收 `input`（query），不接收 where
+- 过程：WhereBuilder 依据 query 自动推断严格 where 条件
+- 约束：仅使用 `metadata.metadata_whitelist` 中允许的字段；不做放宽，0 命中即返回空
+- 输出：返回体中附带 `applied_where` 与 `matched_count`
+
+### 推断能力（当前）
+
+- 语言（lang）：将自然语言关键词映射为 `zh/en`
+- 媒体类型（media_type）：将自然语言关键词映射为 `text/image/video/audio/pdf`
+- 质量阈值（quality_score）：解析 “质量>=0.8 / 大于 0.8 / at least 0.8”等表达为 `$gte`
+- 时间（created_at）：解析“近一周/近一月”为 ISO8601 起点（UTC），输出 `{ "$gte": "..." }`
+- 标签/关键词（tags/keyphrases）：若字段在白名单中，优先使用 `$contains`
+
+仅当字段在 `metadata.metadata_whitelist` 中出现时才会被构造到 where；否则忽略。
+
+### 新增配置项（用于多语言/别名解析）
+
+1. 语言别名（可选）
+
+配置位置：`metadata.language_detection.aliases`
+
+示例：
+
+```json
+{
+  "metadata": {
+    "language_detection": {
+      "aliases": {
+        "中文,简体中文,zh,zh_cn": "zh",
+        "英文,english,en": "en"
+      }
+    }
+  }
+}
+```
+
+用途：将自然语言/多写法映射为标准语言代码，WhereBuilder 解析时优先使用。
+
+2. 媒体类型关键词映射（可选）
+
+配置位置：`metadata.media_type_mapping.by_keyword`
+
+示例：
+
+```json
+{
+  "metadata": {
+    "media_type_mapping": {
+      "by_keyword": {
+        "文本,文档,text": "text",
+        "图片,图像,image": "image",
+        "视频,video": "video",
+        "音频,audio": "audio",
+        "pdf": "pdf"
+      }
+    }
+  }
+}
+```
+
+用途：将多语言/别名映射为标准媒体类型值，WhereBuilder 解析时优先使用。
+
+上述两个映射均为可选；未配置时，WhereBuilder 将回退到最小解析（覆盖范围较小）。
+
+### 返回体中的诊断字段
+
+- `applied_where`: 实际提交给向量库的 where 条件（严格白名单，不放宽）
+- `matched_count`: 本次命中条数（未重排前的数量）
+
+未命中时：`matched_count=0`，`items=[]`；系统不会做放宽，仅在日志中保留采样记录以便后续调优规则。
+
 目的：将 `/retrieval/search` 生成阶段的提示词从代码中抽离为配置，便于按场景/语言/模型调整。
 
 配置位置：`config/app_config.json` → `prompts.retrieval`

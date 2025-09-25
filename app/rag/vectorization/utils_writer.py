@@ -21,9 +21,9 @@ def normalize_and_build_id(text: str, meta: Dict) -> Tuple[str, str, Dict]:
     # 最终写库前由 build_metadata_from_meta 统一白名单扁平化。
     norm_meta = dict(meta)
     doc_id = str(norm_meta.get("doc_id") or norm_meta.get("filename") or "")
-    chunk_index = int(norm_meta.get("chunk_index", -1) or -1)
+    # 去除对 chunk_index 的强依赖：以内容哈希作为主区分因子
     sig = sha1(norm_text.encode("utf-8")).hexdigest()[:16]
-    uid = f"{doc_id}:{chunk_index}:{sig}"
+    uid = f"{doc_id}:{sig}"
     return uid, norm_text, norm_meta
 
 

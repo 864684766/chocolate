@@ -5,6 +5,51 @@
 - 数据处理层: [processing.md](processing.md)
 - 向量化层: [vectorization.md](vectorization.md)
 - 检索层: [retrieval.md](retrieval.md)
+
+## Ingestion 配置（元数据与关键词）
+
+本项目在 `config/app_config.json` 中新增了关键词抽取参数，并精简了向量写库的元数据白名单。
+
+关键词参数：
+
+```json
+"ingestion": {
+  "metadata": {
+    "keywords": {
+      "method": "textrank",
+      "topk": 10,
+      "lang": "auto",
+      "stopwords": { "path": "" }
+    }
+  }
+}
+```
+
+字段说明：
+
+- method：抽取方法（textrank|light|keybert|none），默认 textrank。
+- topk：最大关键词数（建议 5–15）。
+- lang：语言（auto/zh/en）。
+- stopwords.path：停用词文件路径（UTF‑8，每行一词，支持 # 注释）。留空则不做停用词过滤。
+
+白名单（vectorization.metadata_whitelist）：
+
+```json
+[
+  { "field": "doc_id", "type": "string" },
+  { "field": "source", "type": "string" },
+  { "field": "filename", "type": "string" },
+  { "field": "content_type", "type": "string" },
+  { "field": "media_type", "type": "string" },
+  { "field": "lang", "type": "string" },
+  { "field": "tags", "type": "array" },
+  { "field": "keyphrases", "type": "array" },
+  { "field": "created_at", "type": "string" }
+]
+```
+
+字段用途与 where 示例详见检索层文档：[检索层元数据与过滤](retrieval.md#元数据与过滤（白名单与关键词）)
+
 - 应用层: [application.md](application.md)
 - 管理与运维: [management.md](management.md)
 - 设计模式: [patterns.md](patterns.md)

@@ -143,6 +143,14 @@ class ConfigManager:
         """获取日志配置"""
         return self._config_data.get("logging", {})
 
+    def get_language_processing_config(self) -> Dict[str, Any]:
+        """获取语言处理配置"""
+        return self._config_data.get("language_processing", {})
+
+    def get_chinese_processing_config(self) -> Dict[str, Any]:
+        """获取中文处理配置"""
+        return self.get_language_processing_config().get("chinese", {})
+
     def _find_model_by_alias(self, alias: str) -> Optional[Tuple[str, str]]:
         """通过别名查找提供商和模型"""
         providers = self._config_data.get("providers", {})
