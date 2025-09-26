@@ -11,7 +11,8 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 class TestReActAgentCapabilities:
     """测试 ReAct Agent 的核心能力"""
 
-    def _llm_dep_missing(self) -> bool:
+    @staticmethod
+    def _llm_dep_missing() -> bool:
         try:
             import langchain_google_genai  # noqa: F401
             return False
