@@ -42,7 +42,7 @@ class HybridSearcher:
                 items_map[_id] = it
 
         merged = sorted(items_map.values(), key=lambda x: scores.get(x.id, 0.0), reverse=True)[: top_k]
-        return RetrievalResult(items=merged, latency_ms=vector.latency_ms + keyword.latency_ms, debug_info={"fusion": "rrf"})
+        return RetrievalResult(items=merged, latency_ms=vector.latency_ms + keyword.latency_ms)
 
     @staticmethod
     def weighted_sum(vector: RetrievalResult, keyword: RetrievalResult, w_vec: float = 0.7, w_kw: float = 0.3, top_k: int = 10) -> RetrievalResult:
@@ -62,6 +62,6 @@ class HybridSearcher:
             items_map[it.id] = items_map.get(it.id, it)
 
         merged = sorted(items_map.values(), key=lambda x: scores.get(x.id, 0.0), reverse=True)[: top_k]
-        return RetrievalResult(items=merged, latency_ms=vector.latency_ms + keyword.latency_ms, debug_info={"fusion": "weighted_sum", "w_vec": w_vec, "w_kw": w_kw})
+        return RetrievalResult(items=merged, latency_ms=vector.latency_ms + keyword.latency_ms)
 
 

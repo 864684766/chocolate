@@ -47,7 +47,7 @@ class VectorRetriever:
             q: 检索请求（含 query/where/top_k/score_threshold）。
 
         Returns:
-            RetrievalResult: 命中项、耗时与调试信息。
+            RetrievalResult: 命中项、耗时等信息。
         """
         t0 = time.time()
         query_text = clean_query_basic(q.query)
@@ -92,7 +92,6 @@ class VectorRetriever:
         return RetrievalResult(
             items=items,
             latency_ms=latency_ms,
-            debug_info={"source": "vector"},
             applied_where=q.where,
             matched_count=len(items),
         )

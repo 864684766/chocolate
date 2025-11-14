@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from typing import Callable, Dict, Any, Optional
-from .parsers import (
-    lang_parser,
-    media_type_parser,
-    quality_score_parser,
-    created_at_parser,
-    tags_contains_parser,
-)
+# 直接从子模块导入，避免与模块名冲突
+from .parsers.lang_parser import lang_parser
+from .parsers.media_parser import media_type_parser
+from .parsers.quality_parser import quality_score_parser
+from .parsers.time_parser import created_at_parser
+from .parsers.tags_parser import tags_contains_parser
 
 
 class ParserContext:

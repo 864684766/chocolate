@@ -80,10 +80,17 @@
       "batch_size": 16
     },
     "meilisearch": {
-      "enabled": false,
-      "host": "http://localhost:7700",
-      "api_key": "",
-      "index": "documents"
+      "host": "http://124.71.135.104:7700",
+      "api_key": "aV7bL9pQ3rW5zJ8xK2nF4gH6dC1sE0fT",
+      "index": "documents",
+      "sync_on_index": true
+    },
+    "hybrid": {
+      "enabled": true,
+      "method": "rrf",
+      "rrf_k": 60,
+      "vector_weight": 0.7,
+      "keyword_weight": 0.3
     }
   },
 

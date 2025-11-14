@@ -10,10 +10,13 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from .vector_retriever import VectorRetriever
+from .meilisearch_retriever import MeilisearchRetriever
+from .hybrid import HybridSearcher
 from .reranker import CrossEncoderReranker
 from .schemas import RetrievalQuery, RetrievedItem
 from ...config import get_config_manager
 from ...llm_adapters.factory import LLMProviderFactory
+from ...infra.logging import get_logger
 
 
 class RetrievalOrchestrator:
@@ -28,7 +31,21 @@ class RetrievalOrchestrator:
     """
 
     def __init__(self) -> None:
+        """初始化检索编排器。
+
+        读取配置并初始化检索器。
+        """
         self.cfg = get_config_manager()
+        self.logger = get_logger(__name__)
+        
+        # 检查 Meilisearch 是否配置（通过 host 是否存在判断）
+        meili_cfg = (self.cfg.get_config("retrieval") or {}).get("meilisearch", {}) or {}
+        meili_host = str(meili_cfg.get("host", "")).strip()
+        self._meili_enabled = bool(meili_host)
+        
+        # 检查混合检索是否启用
+        hybrid_cfg = (self.cfg.get_config("retrieval") or {}).get("hybrid", {}) or {}
+        self._hybrid_enabled = bool(hybrid_cfg.get("enabled", False)) and self._meili_enabled
 
     def run(self, query: str, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -78,22 +95,67 @@ class RetrievalOrchestrator:
         """
         return (self.cfg.get_config("retrieval") or {}).get("rerank", {})
 
-    @staticmethod
-    def _retrieve(query: str, top_k: int, score_th: float, where: Optional[Dict[str, Any]]) -> List[RetrievedItem]:
+    def _retrieve(self, query: str, top_k: int, score_th: float, where: Optional[Dict[str, Any]]) -> List[RetrievedItem]:
         """
-        执行向量召回。
+        执行检索（向量检索或混合检索）。
 
         参数：
         - query (str): 查询文本。
         - top_k (int): 召回候选数量。
         - score_th (float): 最低得分阈值，低于阈值的结果被过滤。
+        - where (Optional[Dict[str, Any]]): 元数据过滤条件。
 
         返回：
         - List[RetrievedItem]: 召回的候选项列表。
+
+        说明：
+        - 如果混合检索启用，并行执行向量检索和关键词检索，然后融合结果
+        - 如果未启用或失败，降级为仅向量检索
         """
-        retriever = VectorRetriever()
         q = RetrievalQuery(query=query, where=where, top_k=top_k, score_threshold=score_th)
-        return retriever.search(q).items
+        
+        # 执行向量检索
+        vector_retriever = VectorRetriever()
+        vector_result = vector_retriever.search(q)
+        
+        # 如果混合检索未启用，直接返回向量检索结果
+        if not self._hybrid_enabled:
+            return vector_result.items
+        
+        # 执行混合检索：并行调用 MeilisearchRetriever
+        try:
+            meili_retriever = MeilisearchRetriever()
+            meili_result = meili_retriever.search(q)
+            
+            # 如果 Meilisearch 没有结果，直接返回向量检索结果
+            if not meili_result.items:
+                return vector_result.items
+            
+            # 使用 HybridSearcher 融合结果
+            hybrid_cfg = (self.cfg.get_config("retrieval") or {}).get("hybrid", {}) or {}
+            method = str(hybrid_cfg.get("method", "rrf"))
+            
+            if method == "rrf":
+                # RRF 融合
+                rrf_k = int(hybrid_cfg.get("rrf_k", 60))
+                fused_result = HybridSearcher.rrf(
+                    vector_result, meili_result, k=rrf_k, top_k=top_k
+                )
+            else:
+                # 加权求和融合
+                w_vec = float(hybrid_cfg.get("vector_weight", 0.7))
+                w_kw = float(hybrid_cfg.get("keyword_weight", 0.3))
+                fused_result = HybridSearcher.weighted_sum(
+                    vector_result, meili_result,
+                    w_vec=w_vec, w_kw=w_kw, top_k=top_k
+                )
+            
+            return fused_result.items
+            
+        except Exception as e:
+            # 错误降级：Meilisearch 失败时返回向量检索结果
+            self.logger.warning(f"混合检索失败，降级为仅向量检索: {e}", exc_info=True)
+            return vector_result.items
 
     def _rerank(self, query: str, items: List[RetrievedItem], top_n: int) -> List[RetrievedItem]:
         """

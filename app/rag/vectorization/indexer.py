@@ -1,10 +1,11 @@
-from typing import List
+from typing import List, Optional, Dict
 from app.rag.processing.interfaces import ProcessedChunk
 from app.infra.database.chroma.db_helper import ChromaDBHelper
 from .config import VectorizationConfig
 from .embedder import Embedder
 from .metadata_utils import build_metadata_from_meta
 from .utils_writer import normalize_and_build_id, dedup_in_batch, slice_new_records, flatten_metadatas
+from .meilisearch_indexer import MeilisearchIndexer
 from app.infra.logging import get_logger
 
 
@@ -15,18 +16,36 @@ class VectorIndexer:
     - 规范化文本与元数据，生成稳定ID（幂等）
     - 批内去重与库内过滤，避免重复写入
     - 对新增/需更新的条目进行向量编码与持久化
+    - 同步写入 Meilisearch（如果启用）
 
     说明：
     - 文本规范化不进行长度截断，确保可检索文本完整
     - 稳定ID格式："{doc_id or filename}:{chunk_index}:{sha1(norm_text)[:16]}"
-    - 统计日志字段：raw / batch_dedup / existed / written
+    - 统计日志字段：raw / batch_dedup / existed / written / meilisearch_synced
+    - Meilisearch 同步失败不影响 ChromaDB 写入（错误隔离）
     """
 
     def __init__(self, config: VectorizationConfig):
+        """初始化向量索引器。
+
+        Args:
+            config: 向量化配置对象
+        """
         self.config = config
         self.db = ChromaDBHelper()
         self.embedder = Embedder(config)
         self.logger = get_logger(__name__)
+        
+        # 初始化 Meilisearch 索引器（如果启用）
+        self._meili_indexer: Optional[MeilisearchIndexer] = None
+        try:
+            meili_indexer = MeilisearchIndexer()
+            # 检查是否启用
+            if meili_indexer.is_enabled():
+                self._meili_indexer = meili_indexer
+        except Exception as e:
+            self.logger.warning(f"Meilisearch 索引器初始化失败，将跳过同步: {e}")
+            self._meili_indexer = None
 
     def index_chunks(self, chunks: List[ProcessedChunk]) -> int:
         """写入（或更新）一批处理后的文本块。
@@ -43,24 +62,53 @@ class VectorIndexer:
         """
         if not chunks:
             return 0
-        # 1) 文本/元数据统一化 + 生成稳定ID
-        normalized = [normalize_and_build_id(c.text, c.meta) for c in chunks if isinstance(c.text, str)]
 
-        # 2) 批内去重（按稳定ID）
+        # 准备数据：规范化、去重、对比
+        prep_result = self._prepare_chunks(chunks)
+        if not prep_result:
+            return 0
+
+        # 写入 ChromaDB
+        written_n, updated_n = self._index_to_chromadb(
+            prep_result["ids_new"], prep_result["texts_new"], prep_result["metadatas_new"],
+            prep_result["ids_update"], prep_result["texts_update"], prep_result["metas_update"]
+        )
+
+        # 同步到 Meilisearch
+        meili_synced = self._sync_to_meilisearch(
+            prep_result["ids_new"], prep_result["texts_new"], prep_result["metadatas_new"],
+            prep_result["ids_update"], prep_result["texts_update"], prep_result["metas_update"]
+        )
+
+        # 记录统计日志
+        self._log_index_stats(
+            prep_result["raw_n"], prep_result["after_batch_n"], prep_result["existed_n"],
+            written_n, updated_n, meili_synced
+        )
+
+        return written_n + updated_n
+
+    def _prepare_chunks(self, chunks: List[ProcessedChunk]) -> Optional[Dict]:
+        """准备索引数据：规范化、去重、对比库内记录。
+
+        Returns:
+            dict: 包含 ids_new, texts_new, metadatas_new, ids_update, texts_update, metas_update,
+                  raw_n, after_batch_n, existed_n, uniq。如果无需写入则返回 None。
+        """
+        # 文本/元数据统一化 + 生成稳定ID
+        normalized = [normalize_and_build_id(c.text, c.meta) for c in chunks if isinstance(c.text, str)]
         uniq = dedup_in_batch(normalized)
 
         raw_n = len([c for c in chunks if isinstance(c.text, str)])
         after_batch_n = len(uniq)
-
         ids = list(uniq.keys())
         texts = [uniq[i][0] for i in ids]
-        # 扁平化 metadatas（白名单展开）
         metadatas = flatten_metadatas(uniq, ids)
 
         if not ids:
-            return 0
+            return None
 
-        # 3) 与库对比，过滤已存在的ID
+        # 与库对比，过滤已存在的ID
         existed = self.db.get(
             collection_name=self.config.collection_name,
             ids=ids,
@@ -75,7 +123,6 @@ class VectorIndexer:
         texts_update: List[str] = []
         metas_update: List[dict] = []
         if exist_ids:
-            # 读取现有记录的文档与元数据用于对比
             existed_full = self.db.get(
                 collection_name=self.config.collection_name,
                 ids=list(exist_ids),
@@ -92,14 +139,39 @@ class VectorIndexer:
                     metas_update.append(new_meta_flat)
 
         if not ids_new and not ids_update:
-            # 统计日志
             self.logger.info(
                 "vector index: raw=%s, batch_dedup=%s, existed=%s, written=0, updated=0",
                 raw_n, after_batch_n, existed_n,
             )
-            return 0
+            return None
 
-        # 4) 编码并写入
+        return {
+            "ids_new": ids_new,
+            "texts_new": texts_new,
+            "metadatas_new": metadatas_new,
+            "ids_update": ids_update,
+            "texts_update": texts_update,
+            "metas_update": metas_update,
+            "raw_n": raw_n,
+            "after_batch_n": after_batch_n,
+            "existed_n": existed_n,
+            "uniq": uniq,
+        }
+
+    def _index_to_chromadb(
+        self,
+        ids_new: List[str],
+        texts_new: List[str],
+        metadatas_new: List[dict],
+        ids_update: List[str],
+        texts_update: List[str],
+        metas_update: List[dict],
+    ) -> tuple[int, int]:
+        """编码并写入 ChromaDB。
+
+        Returns:
+            (written_n, updated_n): 新增和更新的条目数量。
+        """
         written_n = 0
         if ids_new:
             embeddings_new = self.embedder.encode_parallel(texts_new)
@@ -123,10 +195,56 @@ class VectorIndexer:
                 metadatas=metas_update,
             )
             updated_n = len(ids_update)
-        self.logger.info(
-            "vector index: raw=%s, batch_dedup=%s, existed=%s, written=%s, updated=%s",
-            raw_n, after_batch_n, existed_n, written_n, updated_n,
+
+        return written_n, updated_n
+
+    def _sync_to_meilisearch(
+        self,
+        ids_new: List[str],
+        texts_new: List[str],
+        metadatas_new: List[dict],
+        ids_update: List[str],
+        texts_update: List[str],
+        metas_update: List[dict],
+    ) -> int:
+        """同步数据到 Meilisearch（错误隔离：失败不影响 ChromaDB）。
+
+        Returns:
+            int: 同步成功的条目数量。
+        """
+        if not self._meili_indexer:
+            return 0
+
+        meili_synced = 0
+        try:
+            if ids_new:
+                synced_new = self._meili_indexer.index_documents(ids_new, texts_new, metadatas_new)
+                meili_synced += synced_new
+
+            if ids_update:
+                synced_upd = self._meili_indexer.update_documents(ids_update, texts_update, metas_update)
+                meili_synced += synced_upd
+        except Exception as e:
+            self.logger.warning(f"Meilisearch 同步失败: {e}", exc_info=True)
+
+        return meili_synced
+
+    def _log_index_stats(
+        self,
+        raw_n: int,
+        after_batch_n: int,
+        existed_n: int,
+        written_n: int,
+        updated_n: int,
+        meili_synced: int,
+    ) -> None:
+        """记录索引统计日志。"""
+        log_msg = (
+            f"vector index: raw={raw_n}, batch_dedup={after_batch_n}, "
+            f"existed={existed_n}, written={written_n}, updated={updated_n}"
         )
-        return written_n + updated_n
+        if meili_synced > 0:
+            log_msg += f", meilisearch_synced={meili_synced}"
+        self.logger.info(log_msg)
 
 
