@@ -14,7 +14,7 @@ Meilisearch 检索器：基于 BM25 算法的关键词检索实现。
 - 配置项：retrieval.meilisearch (enabled/host/api_key/index)
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import time
 
 from .schemas import RetrievalQuery, RetrievalResult, RetrievedItem
@@ -113,6 +113,7 @@ class MeilisearchRetriever:
             return RetrievalResult(
                 items=[],
                 latency_ms=0,
+                matched_count=0,
             )
 
         t0 = time.time()
@@ -123,6 +124,7 @@ class MeilisearchRetriever:
                 return RetrievalResult(
                     items=[],
                     latency_ms=0,
+                    matched_count=0,
                 )
 
             # 获取客户端和索引
@@ -142,8 +144,8 @@ class MeilisearchRetriever:
                 filter_list = convert_where_to_filter(q.where)
 
             # 执行搜索
-            search_params: Dict[str, Any] = {
-                "q": query_text,
+            # 构建可选参数字典（根据 Meilisearch Python SDK API，使用 opt_params 作为第二个位置参数）
+            opt_params: Dict[str, Any] = {
                 "limit": q.top_k,
             }
             if filter_list:
@@ -151,11 +153,12 @@ class MeilisearchRetriever:
                 # 或者单个字符串（包含复杂表达式）
                 # 如果只有一个 filter，直接使用字符串；多个则使用列表
                 if len(filter_list) == 1:
-                    search_params["filter"] = filter_list[0]
+                    opt_params["filter"] = filter_list[0]
                 else:
-                    search_params["filter"] = filter_list
+                    opt_params["filter"] = filter_list
 
-            search_result = index.search(**search_params)
+            # 查询字符串作为第一个位置参数，可选参数字典作为第二个位置参数
+            search_result = index.search(query_text, opt_params)
 
             # 解析结果
             items: List[RetrievedItem] = []
