@@ -16,6 +16,7 @@
     "default_provider": "qwen",
     "default_model": "Qwen/Qwen3-0.6B",
     "default_temperature": 0.7,
+    "default_max_new_tokens": 2048,
     "request_timeout": 30,
     "description": "大语言模型基础配置"
   },
@@ -320,8 +321,9 @@
   "prompts": {
     "react_template": "你是一个智能助理，能够使用工具来帮助回答问题。你有以下工具可用：\n\n{tools}\n可以使用的工具名称有：{tool_names}\n\n这是你和用户之前的对话历史：{chat_history}\n\n使用以下格式：\n\nQuestion: 用户的问题\nThought: 我需要思考如何回答这个问题\nAction: 要使用的工具名称\nAction Input: 工具的输入参数\nObservation: 工具返回的结果\n... (这个 Thought/Action/Action Input/Observation 可以重复多次)\nThought: 现在我知道最终答案了\nFinal Answer: 给用户的最终回答\n\n重要提示：\n1. 用中文思考和回答\n2. 如果需要计算，使用 calc 工具\n3. 如果需要搜索信息，使用 search_docs 工具\n4. 如果需要获取网页内容，使用 http_get 工具\n5. 可以组合使用多个工具来解决复杂问题\n6. 最终答案要简洁明了，用自然语言回答\n\nQuestion: {input}\nThought: {agent_scratchpad}",
     "retrieval": {
-      "system": "你是一个中文助理，请基于提供的上下文回答。若信息不足，请明确说明。",
-      "user_template": "问题：{query}\n\n上下文：\n{context}"
+      "system": "你是一个中文助理，请基于提供的上下文回答问题。要求：1. 只使用上下文中的信息回答，不要编造信息；2. 如果上下文为空或与问题无关，请直接说明'抱歉，我在知识库中没有找到相关信息'；3. 回答要简洁明了，直接回答问题，不要添加思考过程或冗余说明。",
+      "user_template": "问题：{query}\n\n上下文：\n{context}",
+      "empty_result_message": "抱歉，我在知识库中没有找到与您的问题相关的内容。请尝试使用其他关键词或检查问题是否正确。"
     },
     "description": "提示词模板配置"
   },

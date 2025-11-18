@@ -125,6 +125,7 @@ def _configure_third_party_loggers() -> None:
         "PIL": logging.WARNING,
         "matplotlib": logging.WARNING,
         "numpy": logging.WARNING,
+        "watchfiles": logging.WARNING,  # 过滤 watchfiles 的 INFO 日志（文件监控相关）
     }
     
     for logger_name, level in third_party_loggers.items():

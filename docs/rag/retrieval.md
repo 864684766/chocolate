@@ -552,8 +552,9 @@ where 过滤示例：
 {
   "prompts": {
     "retrieval": {
-      "system": "你是一个中文助理，请基于提供的上下文回答。若信息不足，请明确说明。",
-      "user_template": "问题：{query}\n\n上下文：\n{context}"
+      "system": "你是一个中文助理，请基于提供的上下文回答问题。要求：1. 只使用上下文中的信息回答，不要编造信息；2. 如果上下文为空或与问题无关，请直接说明'抱歉，我在知识库中没有找到相关信息'；3. 回答要简洁明了，直接回答问题，不要添加思考过程或冗余说明。",
+      "user_template": "问题：{query}\n\n上下文：\n{context}",
+      "empty_result_message": "抱歉，我在知识库中没有找到与您的问题相关的内容。请尝试使用其他关键词或检查问题是否正确。"
     }
   }
 }
@@ -563,8 +564,14 @@ where 过滤示例：
 
 - system：作为第一条 system 消息注入模型，设定回答风格与安全边界。
 - user_template：用户消息模板，支持占位符 `{query}` 与 `{context}`，分别由用户查询与检索拼接上下文替换。
+- empty_result_message：当检索结果为空时返回给用户的提示信息。如果未配置，将使用默认提示。
 
 运行时生效点：`app/rag/retrieval/orchestrator.py::_generate`
+
+说明：
+
+- 当检索结果为空时，系统不会调用 LLM 生成答案，而是直接返回 `empty_result_message` 配置的提示信息。
+- 这样可以避免在空结果时产生不必要的 LLM 调用，提升响应速度并节省资源。
 
 注意：
 

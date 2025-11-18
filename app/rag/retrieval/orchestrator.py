@@ -194,10 +194,13 @@ class RetrievalOrchestrator:
         参数：
         - query (str): 原始查询。
         - items (List[RetrievedItem]): 用于构造上下文的候选项。
-        - opts (Dict[str,Any]): 生成控制项（provider、ai_type、max_new_tokens、enable_thinking、max_context）。
+        - opts (Dict[str,Any]): 生成控制项（provider、ai_type、enable_thinking、max_context）。
 
         返回：
         - str: 生成的最终内容；异常或空结果时返回空串。
+
+        说明：
+        - max_new_tokens 从模型配置中读取（providers.<provider>.models.<model>.max_new_tokens）
         """
         provider = opts.get("provider") or self.cfg.get_settings().provider
         ai_type = opts.get("ai_type") or self.cfg.get_settings().model
@@ -206,17 +209,34 @@ class RetrievalOrchestrator:
         # backend 路由由工厂内部处理，这里直接调用即可
         model = LLMProviderFactory.get_chat_model(ai_type, provider)
         ctx = self._build_preview(items, max_items=opts.get("max_context", 6))
+        
+        # 处理空上下文情况
         prompts_cfg = (self.cfg.get_prompts_config() or {}).get("retrieval", {})
-        system_text = str(prompts_cfg.get("system", "你是一个中文助理，请基于提供的上下文回答。"))
+        if not ctx or not ctx.strip():
+            # 如果没有检索到相关内容，直接返回明确的提示（从配置文件读取）
+            empty_message = str(prompts_cfg.get(
+                "empty_result_message",
+                "抱歉，我在知识库中没有找到与您的问题相关的内容。请尝试使用其他关键词或检查问题是否正确。"
+            ))
+            return empty_message
+        system_text = str(prompts_cfg.get(
+            "system", 
+            "你是一个中文助理，请基于提供的上下文回答问题。如果上下文为空或与问题无关，请明确说明无法回答。"
+        ))
         user_tmpl = str(prompts_cfg.get("user_template", "问题：{query}\n\n上下文：\n{context}"))
         user_text = user_tmpl.format(query=query, context=ctx)
         messages = [
             {"role": "system", "content": system_text},
             {"role": "user", "content": user_text},
         ]
+        
+        # 从模型配置读取 max_new_tokens，如果模型配置中没有则使用 llm 默认值
+        llm_cfg = self.cfg.get_config("llm") or {}
+        default_max_tokens = llm_cfg.get("default_max_new_tokens", 1024)
+        max_new_tokens = model_cfg.get("max_new_tokens") or default_max_tokens
         gen = model.generate(
             messages,
-            max_new_tokens=int(opts.get("max_new_tokens", model_cfg.get("max_new_tokens", 1024))),
+            max_new_tokens=int(max_new_tokens),
             enable_thinking=bool(opts.get("enable_thinking", model_cfg.get("enable_thinking", False))),
         )
         return gen.get("content") or gen.get("raw_text") or ""
