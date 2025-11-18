@@ -39,13 +39,10 @@ class RetrievalOrchestrator:
         self.logger = get_logger(__name__)
         
         # 检查 Meilisearch 是否配置（通过 host 是否存在判断）
+        # 如果 Meilisearch 已配置，则启用混合检索
         meili_cfg = (self.cfg.get_config("retrieval") or {}).get("meilisearch", {}) or {}
         meili_host = str(meili_cfg.get("host", "")).strip()
         self._meili_enabled = bool(meili_host)
-        
-        # 检查混合检索是否启用
-        hybrid_cfg = (self.cfg.get_config("retrieval") or {}).get("hybrid", {}) or {}
-        self._hybrid_enabled = bool(hybrid_cfg.get("enabled", False)) and self._meili_enabled
 
     def run(self, query: str, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -118,8 +115,8 @@ class RetrievalOrchestrator:
         vector_retriever = VectorRetriever()
         vector_result = vector_retriever.search(q)
         
-        # 如果混合检索未启用，直接返回向量检索结果
-        if not self._hybrid_enabled:
+        # 如果 Meilisearch 未配置，直接返回向量检索结果
+        if not self._meili_enabled:
             return vector_result.items
         
         # 执行混合检索：并行调用 MeilisearchRetriever

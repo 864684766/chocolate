@@ -1,6 +1,6 @@
 # 向量化层（Vectorization）
 
-职责：将数据处理层（Processing）输出的 `ProcessedChunk(text, meta)` 批量转换为“向量（embeddings）”，并写入向量数据库（ChromaDB）。不包含检索与重排逻辑。
+职责：将数据处理层（Processing）输出的 `ProcessedChunk(text, meta)` 批量转换为"向量（embeddings）"，并写入向量数据库（ChromaDB）。同时同步写入 Meilisearch 以支持混合检索。不包含检索与重排逻辑。
 
 ## 目录（当前实现）
 
@@ -19,7 +19,9 @@ app/rag/vectorization/
 流程：
 
 - `chunks = ProcessingPipeline().run(samples)` 得到 `List[ProcessedChunk]`
-- `VectorIndexer(cfg).index_chunks(chunks)` 生成向量并写入集合 `cfg.collection_name`（其值来自 `vectorization.database.collection_name`）
+- `VectorIndexer(cfg).index_chunks(chunks)` 执行以下操作：
+  1. 生成向量并写入 ChromaDB 集合 `cfg.collection_name`（其值来自 `vectorization.database.collection_name`）
+  2. 同步写入 Meilisearch 索引（如果 `retrieval.meilisearch.host` 已配置且 `sync_on_index` 为 true）
 
 ### 统一规范化与去重（新增）
 
@@ -41,7 +43,36 @@ app/rag/vectorization/
 - 批内去重：按稳定 ID 去重
 - 库内过滤：`get(ids=...)` 过滤已存在 ID 后再写入
 - upsert：已存在且内容/元数据变化则 update，否则 add
-- 索引器会输出统计日志：`raw / batch_dedup / existed / written / updated`
+- 索引器会输出统计日志：`raw / batch_dedup / existed / written / updated / meilisearch_synced`
+
+### Meilisearch 同步机制
+
+在数据向量化入库时，系统会自动将数据同步到 Meilisearch，以支持后续的混合检索（向量检索 + 关键词检索）：
+
+1. **同步条件**：
+
+   - `retrieval.meilisearch.host` 已配置
+   - `retrieval.meilisearch.sync_on_index` 为 `true`（默认值）
+
+2. **同步过程**（`app/rag/vectorization/indexer.py::_sync_to_meilisearch`）：
+
+   - 在写入 ChromaDB 成功后，调用 `MeilisearchIndexer.index_documents()` 同步数据
+   - 错误隔离：Meilisearch 同步失败不影响 ChromaDB 写入，只记录警告日志
+
+3. **数据格式转换**（`app/rag/vectorization/meilisearch_indexer.py`）：
+
+   - **文档 ID 清理**：ChromaDB 的 ID 格式为 `{doc_id}:{chunk_index}:{hash}`，可能包含冒号，需要转换为 Meilisearch 兼容格式（将冒号替换为下划线）
+   - **元数据展开**：将 ChromaDB 的扁平化元数据展开到文档顶层，便于 Meilisearch 的过滤和搜索
+   - **数组字段处理**：ChromaDB 将数组存储为逗号分隔字符串，需要转换回数组格式
+   - **索引自动创建**：首次写入时自动创建索引，配置搜索字段（`text`）和过滤字段（从 `metadata_whitelist` 读取）
+
+4. **索引配置**：
+
+   - 搜索字段（searchable_attributes）：`["text"]` - 用于 BM25 全文搜索
+   - 过滤字段（filterable_attributes）：从 `metadata.metadata_whitelist` 读取，支持元数据过滤
+
+5. **统计信息**：
+   - 日志中会显示 `meilisearch_synced` 字段，表示成功同步到 Meilisearch 的文档数量
 
 > 提示：若希望 where 生效，请确保需要过滤的键被加入 `metadata_whitelist`，并在入口/管线阶段保证这些键有值（即使为空串/0/False）。
 

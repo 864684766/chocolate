@@ -156,9 +156,9 @@ app/core/tokenization/
 - `app/rag/retrieval/reranker.py::CrossEncoderReranker`。
 - `app/api/agent.py::/retrieval/search` 始终执行重排并返回前 N 条预览；若模型加载失败，将退化为按向量分数排序。
 
-## Meilisearch 配置（retrieval.meilisearch）
+## Meilisearch 配置与混合检索（retrieval.meilisearch）
 
-目的：为后续引入关键词检索（BM25/容错搜索）预留配置，便于与向量召回做混合融合（RRF/加权）。
+目的：提供基于 BM25 算法的关键词检索能力，与向量检索进行混合融合（RRF/加权），提升检索效果。
 
 配置位置：`config/app_config.json` → `retrieval.meilisearch`
 
@@ -168,10 +168,16 @@ app/core/tokenization/
 {
   "retrieval": {
     "meilisearch": {
-      "enabled": false,
       "host": "http://localhost:7700",
       "api_key": "",
-      "index": "documents"
+      "index": "documents",
+      "sync_on_index": true
+    },
+    "hybrid": {
+      "method": "rrf",
+      "rrf_k": 60,
+      "vector_weight": 0.7,
+      "keyword_weight": 0.3
     }
   }
 }
@@ -179,13 +185,99 @@ app/core/tokenization/
 
 字段说明：
 
-- enabled：是否启用 Meilisearch 检索通道（默认关闭）。
-- host/api_key/index：Meilisearch 连接信息与索引名。
+- host：Meilisearch 服务地址（如果为空则不启用混合检索）。
+- api_key：Meilisearch API 密钥（可选）。
+- index：索引名称（默认 "documents"）。
+- sync_on_index：是否在数据入库时同步写入 Meilisearch（默认 true）。
+- hybrid.method：融合方法，可选 "rrf"（默认）或 "weighted_sum"。
+- hybrid.rrf_k：RRF 融合的 k 参数（默认 60）。
+- hybrid.vector_weight：加权融合时向量检索的权重（默认 0.7）。
+- hybrid.keyword_weight：加权融合时关键词检索的权重（默认 0.3）。
 
-实现与扩展点：
+### 数据喂养时的同步机制
 
-- 占位检索器：`app/rag/retrieval/meilisearch_retriever.py`（当前返回空结果）。
-- 接入后可与 `HybridSearcher` 做 RRF 融合；仅向量时融合层透传（不增加时延）。
+在数据入库阶段，系统会自动将数据同步到 Meilisearch：
+
+1. **数据流程**：
+
+   ```
+   ProcessingPipeline → ProcessedChunk → VectorIndexer
+   ```
+
+2. **同步过程**（`app/rag/vectorization/indexer.py`）：
+
+   - `VectorIndexer.index_chunks()` 接收处理后的文本块
+   - 同时写入 ChromaDB（向量存储）和 Meilisearch（关键词索引）
+   - Meilisearch 同步由 `MeilisearchIndexer` 负责，失败不影响 ChromaDB 写入（错误隔离）
+
+3. **数据格式转换**（`app/rag/vectorization/meilisearch_indexer.py`）：
+
+   - 文档 ID 清理：将 ChromaDB 格式的 ID（可能包含冒号）转换为 Meilisearch 兼容格式
+   - 元数据展开：将 ChromaDB 的扁平化元数据展开到文档顶层
+   - 数组字段处理：将逗号分隔字符串转换回数组格式
+   - 索引自动创建：首次写入时自动创建索引并配置搜索字段和过滤字段
+
+4. **索引配置**：
+
+   - 搜索字段（searchable_attributes）：`["text"]` - 用于 BM25 全文搜索
+   - 过滤字段（filterable_attributes）：从 `metadata.metadata_whitelist` 读取，支持元数据过滤
+
+5. **同步开关**：
+   - 如果 `sync_on_index` 为 `false`，则跳过 Meilisearch 同步
+   - 如果 `host` 为空，则 Meilisearch 功能完全禁用
+
+### 检索时的混合融合流程
+
+在检索阶段，系统会根据配置自动执行混合检索：
+
+1. **启用条件**：
+
+   - 如果 `retrieval.meilisearch.host` 已配置，则自动启用混合检索
+   - 无需额外的 `enabled` 开关
+
+2. **检索流程**（`app/rag/retrieval/orchestrator.py::_retrieve`）：
+
+   ```
+   查询请求
+   ↓
+   向量检索（ChromaDB） ← 并行执行
+   关键词检索（Meilisearch） ← 并行执行
+   ↓
+   融合结果（RRF 或加权求和）
+   ↓
+   重排（CrossEncoderReranker）
+   ↓
+   返回最终结果
+   ```
+
+3. **RRF 融合算法**（`app/rag/retrieval/hybrid.py::HybridSearcher.rrf`）：
+
+   - **公式**：`score = Σ 1/(k + rank + 1)`
+   - **参数**：`k` 值从配置 `retrieval.hybrid.rrf_k` 读取（默认 60）
+   - **特点**：稳健、免调参，适合大多数场景
+   - **计算过程**：
+     1. 为向量检索和关键词检索的结果分别建立排名映射
+     2. 合并所有文档 ID
+     3. 对每个文档，计算其在两个检索结果中的排名分数并求和
+     4. 按融合分数排序，返回 top_k 结果
+
+4. **加权求和融合**（`app/rag/retrieval/hybrid.py::HybridSearcher.weighted_sum`）：
+
+   - **公式**：`score = w_vec * score_vec + w_kw * score_kw`
+   - **权重**：从配置 `retrieval.hybrid.vector_weight` 和 `keyword_weight` 读取
+   - **特点**：可精确控制两种检索方式的权重比例
+
+5. **降级策略**：
+   - 如果 Meilisearch 未配置，直接返回向量检索结果
+   - 如果 Meilisearch 检索失败，降级为仅向量检索（记录警告日志）
+   - 如果 Meilisearch 没有结果，直接返回向量检索结果
+
+### 实现文件
+
+- 检索器：`app/rag/retrieval/meilisearch_retriever.py` - Meilisearch 关键词检索实现
+- 索引器：`app/rag/vectorization/meilisearch_indexer.py` - 数据同步到 Meilisearch
+- 融合器：`app/rag/retrieval/hybrid.py` - RRF 和加权求和融合算法
+- 编排器：`app/rag/retrieval/orchestrator.py` - 混合检索流程编排
 
 ## 开发待办（Todo）
 

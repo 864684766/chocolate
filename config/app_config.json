@@ -86,7 +86,6 @@
       "sync_on_index": true
     },
     "hybrid": {
-      "enabled": true,
       "method": "rrf",
       "rrf_k": 60,
       "vector_weight": 0.7,
