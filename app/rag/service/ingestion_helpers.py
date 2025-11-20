@@ -133,15 +133,22 @@ def build_response(files_cnt: int,
 
 
 def make_raw_sample_objects(raw_list: List[Dict[str, Any]]) -> List[RawSample]:
+    """
+    将原始数据字典列表转换为RawSample对象列表。
+    
+    用处：将从数据源（如手动上传）获取的原始数据字典转换为处理流水线
+    所需的标准化RawSample对象，为后续的内容提取和处理做准备。
+    
+    Args:
+        raw_list: 原始数据字典列表，每个字典必须包含以下键：
+            - bytes (bytes): 文件的二进制内容
+            - meta (Dict[str, Any]): 文件的元数据，如媒体类型、文件名等
+            
+    Returns:
+        List[RawSample]: RawSample对象列表，每个对象包含二进制数据和元数据，
+                        可直接用于ProcessingPipeline处理
+    """
     return [RawSample(bytes=raw["bytes"], meta=raw["meta"]) for raw in raw_list]
-
-
-def run_processing(samples: List[RawSample]) -> int:
-    pipeline = ProcessingPipeline()
-    chunks = pipeline.run(samples)
-    return len(chunks)
-
-
 
 def process_and_vectorize(samples: List[RawSample]) -> Dict[str, int]:
     """处理并向量化入口。

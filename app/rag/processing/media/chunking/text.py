@@ -4,6 +4,7 @@
 
 from typing import List, Dict, Any
 from .base import MediaChunkingStrategy
+from app.config import get_config_manager
 
 
 class TextChunkingStrategy(MediaChunkingStrategy):
@@ -34,8 +35,11 @@ class TextChunkingStrategy(MediaChunkingStrategy):
         try:
             from langchain.text_splitter import RecursiveCharacterTextSplitter
             
-            # 中文友好的分隔符
-            separators = [
+            # 从配置文件读取分隔符（language_processing.chinese.chunking.separators）
+            config_manager = get_config_manager()
+            chinese_config = config_manager.get_chinese_processing_config()
+            chunking_config = chinese_config.get("chunking", {})
+            separators = chunking_config.get("separators", [
                 "\n\n",      # 段落分隔
                 "\n",        # 行分隔
                 "。",        # 中文句号
@@ -45,7 +49,7 @@ class TextChunkingStrategy(MediaChunkingStrategy):
                 "，",        # 中文逗号
                 " ",         # 空格
                 ""           # 字符级别
-            ]
+            ])
             
             splitter = RecursiveCharacterTextSplitter(
                 chunk_size=self.chunk_size,

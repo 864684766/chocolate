@@ -313,8 +313,10 @@
     "video_processing": {
       "speech_recognition": {
         "model": "whisper-base",
-        "language": "zh-CN"
-      }
+        "language": "zh"
+      },
+      "temp_dir": "D:/test/chocolate/temp",
+      "description": "视频处理配置，temp_dir 必须配置，不能为空。示例：Windows: \"D:/temp/chocolate\"，Linux: \"/tmp/chocolate\" 或 \"~/chocolate/temp\""
     }
   },
 

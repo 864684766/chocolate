@@ -59,7 +59,7 @@ class ImageVisionExtractor(MediaExtractor):
             bool: True表示transformers库可用，False表示不可用
         """
         try:
-            from transformers import pipeline  # noqa: F401
+            from transformers import pipeline  # type: ignore[import-untyped]  # noqa: F401
             return True
         except (ImportError, ModuleNotFoundError):
             logger.info("Image caption model not available (transformers).")
@@ -77,7 +77,7 @@ class ImageVisionExtractor(MediaExtractor):
             bool: True表示sentence-transformers库可用，False表示不可用
         """
         try:
-            import sentence_transformers  # noqa: F401
+            import sentence_transformers  # type: ignore[import-untyped]  # noqa: F401
             return True
         except (ImportError, ModuleNotFoundError):
             logger.info("Sentence-Transformers not available; skip embedding availability check.")
@@ -99,10 +99,6 @@ class ImageVisionExtractor(MediaExtractor):
                 - captions (List[str]): 生成的图像描述列表（已翻译和去重）
         """
         captions: List[str] = []
-        
-        # 初始化变量，避免作用域问题
-        model_name = "Salesforce/blip-image-captioning-base"
-        language_prompt = "Describe this image:"
 
         # 检查是否启用图像描述功能
         if not self._is_captioning_enabled():
@@ -139,7 +135,7 @@ class ImageVisionExtractor(MediaExtractor):
             List[str]: 生成的英文描述列表，已通过基础过滤和重排
         """
         import io
-        from PIL import Image
+        from PIL import Image  # type: ignore[import-untyped]
 
         model_name = self._caption_config.get("model", "Salesforce/blip-image-captioning-base")
         generation_config = self._caption_config.get("generation", {})
@@ -198,7 +194,7 @@ class ImageVisionExtractor(MediaExtractor):
         Returns:
             List[str]: 生成的图像描述文本列表
         """
-        from transformers import pipeline
+        from transformers import pipeline  # type: ignore[import-untyped]
         captions: List[str] = []
         cap_pipe = pipeline("image-to-text", model=model_name)
         # 优先使用文档建议的 generate_kwargs 传参；若版本不支持则回退到多次调用
@@ -316,7 +312,7 @@ class ImageVisionExtractor(MediaExtractor):
         try:
             model_path = translation_cfg.get("model", "Helsinki-NLP/opus-mt-en-zh")
             batch_size = int(translation_cfg.get("batch_size", 16))
-            from transformers import pipeline
+            from transformers import pipeline  # type: ignore[import-untyped]
             # 使用稳定的通用任务名 "translation"，并显式传入 src_lang/tgt_lang，
             # 以匹配 transformers 的类型签名（Literal["translation"], str, ...）
             translator = pipeline("translation", model=model_path, src_lang="en", tgt_lang="zh")

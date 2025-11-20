@@ -360,6 +360,9 @@ strategy = ChunkingStrategyFactory.create_strategy(
 - `default_overlap`: 默认重叠大小（字符数）
 - `use_langchain`: 是否使用 LangChain 智能分块器
 - `separators`: 分块分隔符优先级列表，按优先级从高到低排列
+  - 该配置被 `ChineseProcessor` 和 `TextChunkingStrategy` 共同使用
+  - 配置位置：`language_processing.chinese.chunking.separators`
+  - 如果未配置，将使用默认分隔符列表（段落、行、中文标点、空格、字符级别）
 
 **text_cleaning 文本清洗配置**：
 
@@ -545,8 +548,29 @@ processor = ChineseProcessor(use_langchain=False)
 **配置参数说明**：
 
 - **speech_recognition**: 语音识别配置
-  - `model`: Whisper 模型大小（base, small, medium, large）
-  - `language`: 识别语言（zh-CN, en, 等）
+  - `model`: Whisper 模型大小（base, small, medium, large），支持 "whisper-" 前缀或直接使用模型名
+  - `language`: 识别语言（zh-CN, en, 等），用于语音识别和字幕生成
+
+**视频提取逻辑说明**：
+
+视频内容提取器 (`VideoContentExtractor`) 现在**同时提取字幕和语音转录文本**，两者可以互为补充：
+
+1. **字幕提取**：
+
+   - 优先使用 `ffmpeg-python` 提取视频内嵌字幕（支持 SRT、VTT、ASS、SSA 等格式）
+   - 如果没有内嵌字幕，使用 Whisper 生成带时间戳的字幕
+   - 返回格式：`List[Dict[str, Any]]`，每个字典包含 `text`、`start_time`、`end_time`
+
+2. **语音转录**：
+
+   - 优先使用 Whisper 进行语音识别
+   - 如果 Whisper 失败，回退到 SpeechRecognition
+   - 返回格式：`str`，完整的语音转录文本
+
+3. **异常处理**：
+   - 所有方法都包含完整的异常处理和日志记录
+   - 确保异常时能正确回退到备选方案
+   - 临时文件会在 `finally` 块中确保清理
 
 ### 使用方法
 
