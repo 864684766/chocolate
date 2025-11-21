@@ -106,14 +106,9 @@ class VideoContentExtractor(MediaExtractor):
             Dict[str, Any]: 包含以下键的字典：
                 - subtitles (List[Dict]): 提取的字幕列表
                 - transcript (str): 语音转录的文本内容
-                - video_meta (Dict): 视频处理元数据，包含格式、处理状态等
         """
         if not self.is_available():
-            return {
-                "subtitles": [],
-                "transcript": "",
-                "video_meta": {"error": "Video processing not available"}
-            }
+            return {"subtitles": [], "transcript": ""}
         
         temp_file_path = None
         
@@ -128,19 +123,10 @@ class VideoContentExtractor(MediaExtractor):
             return {
                 "subtitles": subtitles,
                 "transcript": transcript,
-                "video_meta": {
-                    "video_format": meta.get("video_format", "auto"),
-                    "has_subtitles": bool(subtitles),
-                    "has_transcript": bool(transcript)
-                }
             }
         except (ImportError, ModuleNotFoundError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"Video content extraction failed: {e}")
-            return {
-                "subtitles": [],
-                "transcript": "",
-                "video_meta": {"error": str(e)}
-            }
+            return {"subtitles": [], "transcript": ""}
         finally:
             # 清理临时文件
             if temp_file_path and os.path.exists(temp_file_path):

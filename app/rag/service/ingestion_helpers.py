@@ -7,6 +7,7 @@ import os
 from app.rag.data_ingestion.validators import classify_files
 from app.rag.data_ingestion.sources.manual_upload import ManualUploadSource, UploadItem
 from app.rag.processing.interfaces import RawSample
+from app.rag.processing.metadata_manager import MetadataManager
 from app.rag.processing.pipeline import ProcessingPipeline
 from app.config import get_config_manager
 
@@ -88,9 +89,10 @@ async def build_upload_items(accepted: List[UploadFile], dataset: Optional[str])
     for f in accepted:
         content = await f.read()
         media_type = detect_media_type(f.filename, f.content_type)
-        meta: Dict[str, Any] = {"media_type": media_type}
+        meta_payload: Dict[str, Any] = {"media_type": media_type}
         if dataset:
-            meta["dataset"] = dataset
+            meta_payload["dataset"] = dataset
+        meta = MetadataManager().build_metadata(meta_payload)
         items.append(UploadItem(
             filename=f.filename,
             content_type=f.content_type or "application/octet-stream",

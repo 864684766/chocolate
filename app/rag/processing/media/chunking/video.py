@@ -35,28 +35,25 @@ class VideoChunkingStrategy(MediaChunkingStrategy):
         # content 应该包含字幕和可能的语音转写结果
         subtitles = content.get("subtitles", [])
         transcript = content.get("transcript", "")
-        video_meta = content.get("video_meta", {})
         
         chunks = []
         chunk_index = 0
         
         if subtitles:
             # 优先使用字幕信息
-            chunks.extend(self._chunk_by_subtitles(subtitles, video_meta, chunk_index))
+            chunks.extend(self._chunk_by_subtitles(subtitles, chunk_index))
         elif transcript:
             # 回退到语音转写结果
-            chunks.extend(self._chunk_by_transcript(transcript, video_meta, chunk_index))
+            chunks.extend(self._chunk_by_transcript(transcript, chunk_index))
         
         return chunks
     
-    def _chunk_by_subtitles(self, subtitles: List[Dict[str, Any]], 
-                           video_meta: Dict[str, Any], start_index: int) -> List[Dict[str, Any]]:
+    def _chunk_by_subtitles(self, subtitles: List[Dict[str, Any]], start_index: int) -> List[Dict[str, Any]]:
         """
         基于字幕分块
         
         Args:
             subtitles: 字幕列表
-            video_meta: 视频元数据
             start_index: 起始索引
             
         Returns:
@@ -88,7 +85,6 @@ class VideoChunkingStrategy(MediaChunkingStrategy):
                         "chunk_size": len(current_chunk),
                         "start_time": current_start_time,
                         "end_time": current_end_time,
-                        "video_meta": video_meta
                     }
                     
                     chunks.append({
@@ -110,7 +106,6 @@ class VideoChunkingStrategy(MediaChunkingStrategy):
                 "chunk_size": len(current_chunk),
                 "start_time": current_start_time,
                 "end_time": current_end_time,
-                "video_meta": video_meta
             }
             
             chunks.append({
@@ -120,14 +115,12 @@ class VideoChunkingStrategy(MediaChunkingStrategy):
         
         return chunks
     
-    def _chunk_by_transcript(self, transcript: str, video_meta: Dict[str, Any], 
-                            start_index: int) -> List[Dict[str, Any]]:
+    def _chunk_by_transcript(self, transcript: str, start_index: int) -> List[Dict[str, Any]]:
         """
         基于语音转写结果分块
         
         Args:
             transcript: 语音转写文本
-            video_meta: 视频元数据
             start_index: 起始索引
             
         Returns:
@@ -142,7 +135,6 @@ class VideoChunkingStrategy(MediaChunkingStrategy):
             chunk["meta"].update({
                 "chunk_index": start_index + i,
                 "chunk_type": "video_transcript",
-                "video_meta": video_meta
             })
         
         return text_chunks

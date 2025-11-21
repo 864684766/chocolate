@@ -35,17 +35,14 @@ class ManualUploadSource:
     def process_items(self, items: List[UploadItem]) -> List[Dict[str, Any]]:
         raw_samples: List[Dict[str, Any]] = []
         for item in items:
-            # 使用元数据管理器创建完整元数据
-            meta = self.metadata_manager.create_metadata(
-                text="",  # 此时还没有文本内容
-                filename=item.filename,
-                content_type=item.content_type,
-                source="manual_upload"
+            meta = self.metadata_manager.build_metadata(
+                meta={
+                    **item.metadata,
+                    "filename": item.filename,
+                    "content_type": item.content_type,
+                    "source": "manual_upload"
+                }
             )
-            
-            # 合并用户提供的元数据
-            if item.metadata:
-                meta.update(item.metadata)
 
             # 暂不解析文件内容为文本，交由 processing/media/* 处理
             raw = {

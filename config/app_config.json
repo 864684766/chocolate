@@ -395,11 +395,21 @@
       { "field": "filename", "type": "string" },
       { "field": "content_type", "type": "string" },
       { "field": "media_type", "type": "string" },
+      { "field": "created_at", "type": "string" },
       { "field": "lang", "type": "string" },
+      { "field": "text_len", "type": "number" },
       { "field": "tags", "type": "array" },
       { "field": "keyphrases", "type": "array" },
-      { "field": "created_at", "type": "string" },
-      { "field": "quality_score", "type": "number" }
+      { "field": "quality_score", "type": "number" },
+      { "field": "chunk_index", "type": "number" },
+      { "field": "chunk_type", "type": "string" },
+      { "field": "chunk_size", "type": "number" },
+      { "field": "total_chunks", "type": "number" },
+      { "field": "page_number", "type": "number" },
+      { "field": "start_time", "type": "number" },
+      { "field": "end_time", "type": "number" },
+      { "field": "caption_count", "type": "number" },
+      { "field": "region_index", "type": "number" }
     ],
     "media_type_mapping": {
       "by_extension": {

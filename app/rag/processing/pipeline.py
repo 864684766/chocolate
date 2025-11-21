@@ -115,13 +115,18 @@ class ProcessingPipeline:
             return []
         parts = self.lang.chunk(cleaned)
         chunks: List[ProcessedChunk] = []
+        total_chunks = len(parts)
+        base_meta = extracted.get("meta", {})
         for idx, part in enumerate(parts):
-            # 使用元数据管理器更新元数据
-            updated_meta = self.metadata_manager.update_content_metadata(
-                part, 
-                extracted.get("meta", {})
-            )
-            chunks.append(ProcessedChunk(text=part, meta=updated_meta))
+            candidate_fields = {
+                **base_meta,
+                "chunk_index": idx,
+                "chunk_type": "text",
+                "chunk_size": len(part),
+                "total_chunks": total_chunks
+            }
+            normalized_meta = self.metadata_manager.build_metadata(candidate_fields, text=part)
+            chunks.append(ProcessedChunk(text=part, meta=normalized_meta))
         return chunks
 
     @staticmethod
@@ -167,10 +172,10 @@ class ProcessingPipeline:
         chunks: List[ProcessedChunk] = []
         for chunk_result in chunk_results:
             chunk_text = chunk_result["text"]
-            chunk_meta = chunk_result["meta"]
-            # 保留分块策略产生的事实字段；不再归一化（由 Indexer 兜底）
-            if self.quality:
-                chunk_meta.update(self.quality.score(chunk_text, chunk_meta))
+            chunk_meta = self.metadata_manager.build_metadata(
+                chunk_result.get("meta", {}),
+                text=chunk_text
+            )
             chunks.append(ProcessedChunk(text=chunk_text, meta=chunk_meta))
         return chunks
 

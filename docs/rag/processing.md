@@ -187,6 +187,29 @@ updated_meta = manager.update_content_metadata(
 )
 ```
 
+### 元数据白名单字段（通用+媒体特定）
+
+当前所有媒体类型共用一份白名单，并按照字段语义分为三层。即使某些字段在特定媒体中暂时没有值，也会在入库之前被补为默认值（字符串 → 空串，数字 →0）以保持结构统一。
+
+**通用文档字段（任何媒体都应具备）：**
+
+- `doc_id`/`source`/`filename`/`content_type`/`media_type`/`created_at`
+- `lang`/`text_len`/`keyphrases`/`tags`
+- `quality_score`
+
+**通用分块字段（所有 chunk 必备）：**
+
+- `chunk_index`/`chunk_type`/`chunk_size`/`total_chunks`
+
+**媒体特定字段：**
+
+- PDF/Office：`page_number`
+- 视频/音频：`start_time`、`end_time`
+- 图像 Caption：`caption_count`
+- 图像 OCR：`region_index`
+
+在 `config/app_config.json > metadata.metadata_whitelist` 中可以新增或调整字段，流程中的生成器会自动跟进；检索侧（Meilisearch/Chroma `where` 过滤）也会基于同一份白名单进行校验。
+
 ## 质量评估配置
 
 质量评估器 (`SimpleQualityAssessor`) 通过配置文件进行参数调整，配置位置：`metadata.quality`

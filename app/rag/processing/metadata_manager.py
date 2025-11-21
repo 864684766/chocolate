@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Any, Optional
-import hashlib
-import time
-from datetime import datetime, timezone
+from typing import Dict, Any, List, Optional
 
 from app.config import get_config_manager
 from app.rag.service.keywords_service import extract_keyphrases
@@ -13,12 +10,8 @@ from app.rag.processing.quality_checker import SimpleQualityAssessor
 class MetadataManager:
     """统一的元数据管理器
     
-    负责整个数据处理流程中的所有元数据操作：
-    - 基础元数据生成 (doc_id, filename, source, created_at)
-    - 内容分析元数据 (lang, text_len, keyphrases)
-    - 质量评估元数据 (quality_score)
-    - 元数据规范化 (白名单过滤, 类型转换)
-    - 元数据验证和补全
+    作用：读取配置中的 metadata_whitelist，根据白名单字段
+    将外部传入的 meta 规范化；不会生成白名单之外的字段，也不会兜底。
     """
     
     def __init__(self):
@@ -28,209 +21,163 @@ class MetadataManager:
         加载配置并初始化相关组件
         """
         self.config = self._load_config()
+        self.whitelist: List[str] = self.config.get("whitelist_fields", [])
+        self.types_map: Dict[str, str] = self.config.get("whitelist_types", {})
         self.quality_assessor = SimpleQualityAssessor()
     
-    def create_metadata(self, 
-                       text: str = "",
-                       filename: Optional[str] = None,
-                       content_type: Optional[str] = None,
-                       source: Optional[str] = None) -> Dict[str, Any]:
+    def build_metadata(self,
+                       meta: Dict[str, Any],
+                       text: Optional[str] = None) -> Dict[str, Any]:
         """
-        创建完整的元数据
+        按白名单生成元数据
         
         Args:
-            text: 文本内容
-            filename: 文件名
-            content_type: 内容类型
-            source: 数据源
+            meta: 外部传入的原始元数据（任意结构）
+            text: 可选的文本内容，用于生成 lang/text_len/keyphrases/quality_score 等派生字段
             
         Returns:
-            Dict[str, Any]: 完整的元数据
+            Dict[str, Any]: 只包含白名单字段的元数据
         """
-        meta = {}
+        if not self.whitelist:
+            return {}
         
-        # 1. 基础元数据
-        meta.update(self._create_basic_metadata(filename, content_type, source))
+        base_meta = dict(meta or {})
+        normalized: Dict[str, Any] = {}
         
-        # 2. 内容分析元数据
+        # 第一遍：处理白名单字段，使用传入值或默认值
+        for field in self.whitelist:
+            if field in base_meta and base_meta.get(field) not in (None, ""):
+                coerced = self._coerce_value(field, base_meta.get(field))
+                if coerced is not None and coerced != normalized.get(field):
+                    normalized[field] = coerced
+                    continue
+            else:
+                normalized[field] = self._default_value(field)
+        
+        # 第二遍：如果有文本，生成文本相关字段并覆盖默认值
         if text:
-            meta.update(self._analyze_content_metadata(text))
+            text_fields = self._build_text_dependent_fields(text, normalized)
+            normalized.update(text_fields)
         
-        # 3. 规范化元数据（暂时跳过，避免循环导入）
-        # meta = self._normalize_metadata(meta)
-        
-        return meta
+        return normalized
     
-    def update_content_metadata(self, text: str, meta: Dict[str, Any]) -> Dict[str, Any]:
+    def iter_fields(self):
         """
-        更新内容相关的元数据
-        
-        Args:
-            text: 文本内容
-            meta: 现有元数据
-            
-        Returns:
-            Dict[str, Any]: 更新后的元数据
+        返回当前白名单字段迭代器
         """
-        updated_meta = meta.copy()
-        
-        # 更新内容分析元数据
-        content_meta = self._analyze_content_metadata(text)
-        updated_meta.update(content_meta)
-        
-        # 质量评估元数据
-        quality_meta = self._assess_quality_metadata(text, updated_meta)
-        updated_meta.update(quality_meta)
-        
-        # 规范化元数据（暂时跳过，避免循环导入）
-        # updated_meta = self._normalize_metadata(updated_meta)
-        
-        return updated_meta
+        return iter(self.whitelist)
     
-    def _create_basic_metadata(self, 
-                              filename: Optional[str], 
-                              content_type: Optional[str], 
-                              source: Optional[str]) -> Dict[str, Any]:
+    def build_upload_metadata(self,
+                              filename: str,
+                              content_type: str,
+                              source: str,
+                              extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        创建基础元数据
+        为上传场景构建统一的基础元数据
         
         Args:
             filename: 文件名
-            content_type: 内容类型
-            source: 数据源
-            
+            content_type: MIME 类型
+            source: 数据来源
+            extra: 额外的元数据（可选）
+        
         Returns:
-            Dict[str, Any]: 基础元数据
+            Dict[str, Any]: 经过白名单过滤的元数据
         """
-        meta = {
-            "doc_id": self._generate_doc_id(filename),
-            "source": source or "unknown",
-            "created_at": self._get_current_timestamp(),
-            "media_type": self._detect_media_type(filename, content_type)
-        }
-        
-        # 文件名
-        if filename:
-            meta["filename"] = filename
-        
-        # 内容类型
-        if content_type:
-            meta["content_type"] = content_type
-        
-        return meta
+        payload: Dict[str, Any] = dict(extra or {})
+        payload["filename"] = filename
+        payload["content_type"] = content_type
+        payload["source"] = source
+        return self.build_metadata(payload)
     
-    def _analyze_content_metadata(self, text: str) -> Dict[str, Any]:
+    def _build_text_dependent_fields(self, text: str, meta: Dict[str, Any]) -> Dict[str, Any]:
         """
-        分析内容相关的元数据
+        生成依赖文本内容的字段
         
         Args:
-            text: 文本内容
-            
+            text: 当前 chunk 的文本
+            meta: 已经规范化的元数据（用于质量评估参考）
+        
         Returns:
-            Dict[str, Any]: 内容分析元数据
+            Dict[str, Any]: 仅包含白名单允许的文本派生字段
         """
-        # 语言检测
-        lang = self._detect_language(text)
+        fields: Dict[str, Any] = {}
+        lang_value: Optional[str] = meta.get("lang")
         
-        content_meta: Dict[str, Any] = {
-            "lang": lang,
-            "text_len": len(text)
-        }
+        if "lang" in self.whitelist:
+            lang_value = self._detect_language(text) if not lang_value else str(lang_value)
+            fields["lang"] = lang_value
         
-        # 关键词提取
-        keyphrases = self._extract_keyphrases(text, lang)
-        if keyphrases:
-            content_meta["keyphrases"] = keyphrases
+        if "text_len" in self.whitelist:
+            fields["text_len"] = len(text)
         
-        return content_meta
+        if "keyphrases" in self.whitelist:
+            phrases = self._extract_keyphrases(text, lang_value or self.config.get("default_language", "zh"))
+            if phrases:
+                fields["keyphrases"] = phrases
+        
+        if "quality_score" in self.whitelist:
+            quality = self.quality_assessor.score(text, {**meta, **fields})
+            score = quality.get("quality_score")
+            if isinstance(score, (int, float)):
+                fields["quality_score"] = float(score)
+        
+        return fields
     
-    def _assess_quality_metadata(self, text: str, meta: Dict[str, Any]) -> Dict[str, Any]:
+    def _coerce_value(self, field: str, value: Any) -> Any:
         """
-        质量评估元数据
+        将字段值按白名单类型转换
         
         Args:
-            text: 文本内容
-            meta: 现有元数据
-            
+            field: 字段名称
+            value: 原始值
+        
         Returns:
-            Dict[str, Any]: 质量评估元数据
+            Any: 转换后的值，若无法转换则返回 None
         """
-        return self.quality_assessor.score(text, meta)
+        if value is None:
+            return None
+        field_type = self.types_map.get(field)
+        if field_type == "number":
+            if isinstance(value, (int, float)):
+                return value
+            try:
+                num = float(str(value).strip())
+                return int(num) if num.is_integer() else num
+            except (ValueError, TypeError):
+                return None
+        if field_type == "boolean":
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, str):
+                lowered = value.strip().lower()
+                if lowered in {"true", "1", "yes"}:
+                    return True
+                if lowered in {"false", "0", "no"}:
+                    return False
+            return None
+        if field_type == "array":
+            if isinstance(value, (list, tuple)):
+                items = [str(item).strip() for item in value if str(item).strip()]
+                return items or None
+            item = str(value).strip()
+            return [item] if item else None
+        # string 或未声明类型：统一转字符串
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (int, float, bool)):
+            return str(value)
+        return str(value)
     
-    @staticmethod
-    def _normalize_metadata(meta: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        规范化元数据
-        
-        Args:
-            meta: 原始元数据
-            
-        Returns:
-            Dict[str, Any]: 规范化后的元数据
-        """
-        # 使用现有的规范化逻辑
-        from app.rag.vectorization.metadata_utils import normalize_meta_for_vector
-        return normalize_meta_for_vector(meta)
-    
-    @staticmethod
-    def _generate_doc_id(filename: Optional[str]) -> str:
-        """
-        生成文档ID
-        
-        Args:
-            filename: 文件名
-            
-        Returns:
-            str: 文档ID
-        """
-        # 基于文件名和时间戳生成稳定的文档ID
-        if filename:
-            content_hash = hashlib.md5(filename.encode('utf-8')).hexdigest()[:8]
-        else:
-            content_hash = hashlib.md5(str(time.time()).encode('utf-8')).hexdigest()[:8]
-        
-        timestamp = str(int(time.time()))[-6:]  # 取时间戳后6位
-        return f"doc_{content_hash}_{timestamp}"
-    
-    @staticmethod
-    def _get_current_timestamp() -> str:
-        """
-        获取当前时间戳（ISO8601格式）
-        
-        Returns:
-            str: ISO8601格式的时间戳
-        """
-        return datetime.now(timezone.utc).isoformat()
-    
-    def _detect_media_type(self, filename: Optional[str], content_type: Optional[str]) -> str:
-        """
-        检测媒体类型
-        
-        Args:
-            filename: 文件名
-            content_type: 内容类型
-            
-        Returns:
-            str: 媒体类型
-        """
-        media_config = self.config.get("media_type_mapping", {})
-        extension_mapping = media_config.get("by_extension", {})
-        content_type_mapping = media_config.get("by_content_type", {})
-        default_type = media_config.get("default", "text")
-        
-        # 基于文件扩展名的媒体类型检测
-        if filename:
-            ext = filename.lower().split('.')[-1] if '.' in filename else ''
-            if ext in extension_mapping:
-                return extension_mapping[ext]
-        
-        # 基于内容类型的媒体类型检测
-        if content_type:
-            for prefix, media_type in content_type_mapping.items():
-                if content_type.startswith(prefix):
-                    return media_type
-        
-        return default_type
+    def _default_value(self, field: str) -> Any:
+        field_type = self.types_map.get(field, "string")
+        if field_type == "number":
+            return 0
+        if field_type == "boolean":
+            return False
+        if field_type == "array":
+            return []
+        return ""
     
     def _detect_language(self, text: str) -> str:
         """
@@ -298,16 +245,24 @@ class MetadataManager:
         
         # 从配置文件获取元数据管理配置
         metadata_config = config_manager.get_config("metadata") or {}
+        whitelist_raw = metadata_config.get("metadata_whitelist", [])
+        if whitelist_raw and isinstance(whitelist_raw[0], dict):
+            whitelist = [str(item.get("field")) for item in whitelist_raw if item.get("field")]
+            types_map = {str(item.get("field")): str(item.get("type")) for item in whitelist_raw if item.get("field")}
+        else:
+            whitelist = [str(item) for item in whitelist_raw]
+            types_map = {}
         
-        return {
-            "default_language": metadata_config.get("default_language", "zh"),
-            "language_detection": metadata_config.get("language_detection", {
+        metadata_config = metadata_config.copy()
+        metadata_config["whitelist_fields"] = whitelist
+        metadata_config["whitelist_types"] = types_map
+        
+        if "language_detection" not in metadata_config:
+            metadata_config["language_detection"] = {
                 "chinese_threshold": 0.3,
                 "min_text_length": 10
-            }),
-            "media_type_mapping": metadata_config.get("media_type_mapping", {
-                "by_extension": {},
-                "by_content_type": {},
-                "default": "text"
-            })
-        }
+            }
+        if "default_language" not in metadata_config:
+            metadata_config["default_language"] = "zh"
+        
+        return metadata_config

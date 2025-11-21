@@ -71,7 +71,7 @@ def agent_invoke(req: InvokeRequest):
         )
 
 
-@router.post("/retrieval/search", response_model=BaseResponse)
+@router.get("/retrieval/search", response_model=BaseResponse)
 def retrieval_search(req: InvokeRequest):
     """
     与 agent_invoke 同构的检索接口：
