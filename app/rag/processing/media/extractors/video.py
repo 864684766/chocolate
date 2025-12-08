@@ -375,7 +375,6 @@ class VideoContentExtractor(MediaExtractor):
             ImportError: Whisper 库未安装
             Exception: 其他处理异常
         """
-        import whisper
         
         # 获取配置
         model_name = "base"
@@ -442,24 +441,28 @@ class VideoContentExtractor(MediaExtractor):
         import speech_recognition as sr
         
         # 获取语言配置
-        language = 'zh-CN'
+        language: str = 'zh-CN'
         try:
             from app.config import get_config_manager
             config_manager = get_config_manager()
             video_config = config_manager.get_video_processing_config()
             speech_config = video_config.get("speech_recognition", {})
-            language = speech_config.get("language", "zh-CN")
+            language_str = speech_config.get("language", "zh-CN")
+            if language_str and isinstance(language_str, str):
+                language = language_str
         except Exception as e:
             logger.debug(f"Failed to get language config, using default: {e}")
         
         # 进行语音识别
-            recognizer = sr.Recognizer()
+        recognizer = sr.Recognizer()
         with sr.AudioFile(video_path) as source:
-                audio = recognizer.record(source)
+            audio = recognizer.record(source)
         
-        text = recognizer.recognize_google(audio=audio, language=language)
+        # SpeechRecognition 库的类型提示不完整，recognize_google 方法确实存在
+        text = recognizer.recognize_google(audio, language=language)  # type: ignore[attr-defined]
         
         if not text:
             logger.warning("SpeechRecognition returned empty text")
+            return ""
         
-            return text
+        return text
