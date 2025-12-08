@@ -6,6 +6,7 @@ from typing import Optional
 from .base import MediaExtractor
 from .image_ocr import ImageOCRExtractor
 from .video import VideoContentExtractor
+from .audio import AudioContentExtractor
 
 
 class MediaExtractorFactory:
@@ -31,7 +32,9 @@ class MediaExtractorFactory:
         """
         if media_type.lower() == "image":
             return ImageOCRExtractor()  # 内置视觉回退
-        elif media_type.lower() in ["video", "audio"]:
+        elif media_type.lower() == "video":
             return VideoContentExtractor()
+        elif media_type.lower() == "audio":
+            return AudioContentExtractor()
         else:
             return None

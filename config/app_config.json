@@ -312,13 +312,13 @@
       "languages": ["ch_sim", "en"],
       "confidence_threshold": 0.5
     },
+    "temp_dir": "D:/test/chocolate/temp",
+    "speech_recognition": {
+      "model": "whisper-base",
+      "description": "语音识别配置，供视频和音频共用。Whisper 会自动检测语言，无需手动指定。"
+    },
     "video_processing": {
-      "speech_recognition": {
-        "model": "whisper-base",
-        "language": "zh"
-      },
-      "temp_dir": "D:/test/chocolate/temp",
-      "description": "视频处理配置，temp_dir 必须配置，不能为空。示例：Windows: \"D:/temp/chocolate\"，Linux: \"/tmp/chocolate\" 或 \"~/chocolate/temp\""
+      "description": "视频处理配置，包含视频特有的处理选项"
     }
   },
 

@@ -553,16 +553,18 @@ processor = ChineseProcessor(use_langchain=False)
 - **confidence_threshold**: 置信度阈值（0.0-1.0）
   - 低于此阈值的识别结果将被过滤
 
-#### 3. 视频处理配置 (video_processing)
+#### 3. 语音识别配置 (speech_recognition)
 
 ```json
 {
   "media_processing": {
+    "temp_dir": "D:/test/chocolate/temp",
+    "speech_recognition": {
+      "model": "whisper-base",
+      "description": "语音识别配置，供视频和音频共用。Whisper 会自动检测语言，无需手动指定。"
+    },
     "video_processing": {
-      "speech_recognition": {
-        "model": "whisper-base",
-        "language": "zh-CN"
-      }
+      "description": "视频处理配置，包含视频特有的处理选项"
     }
   }
 }
@@ -570,27 +572,49 @@ processor = ChineseProcessor(use_langchain=False)
 
 **配置参数说明**：
 
-- **speech_recognition**: 语音识别配置
+- **temp_dir**: 临时文件目录路径（必填）
+  - 供视频和音频处理共用，用于创建临时文件进行语音识别
+  - 示例：Windows: `"D:/test/chocolate/temp"`，Linux: `"/tmp/chocolate"` 或 `"~/chocolate/temp"`
+- **speech_recognition**: 语音识别配置（供视频和音频共用）
+
   - `model`: Whisper 模型大小（base, small, medium, large），支持 "whisper-" 前缀或直接使用模型名
-  - `language`: 识别语言（zh-CN, en, 等），用于语音识别和字幕生成
+  - **自动语言检测**: Whisper 会自动检测音频/视频中的语言，无需手动配置 `language` 参数
+  - 支持 99 种语言的自动识别，准确率高
 
-**视频提取逻辑说明**：
+- **video_processing**: 视频处理配置
+  - 包含视频特有的处理选项（当前主要为占位，未来可扩展）
 
-视频内容提取器 (`VideoContentExtractor`) 现在**同时提取字幕和语音转录文本**，两者可以互为补充：
+**视频和音频提取逻辑说明**：
 
-1. **字幕提取**：
+系统现在提供了专门的提取器来处理视频和音频：
 
-   - 优先使用 `ffmpeg-python` 提取视频内嵌字幕（支持 SRT、VTT、ASS、SSA 等格式）
-   - 如果没有内嵌字幕，使用 Whisper 生成带时间戳的字幕
-   - 返回格式：`List[Dict[str, Any]]`，每个字典包含 `text`、`start_time`、`end_time`
+1. **视频内容提取器** (`VideoContentExtractor`)：
 
-2. **语音转录**：
+   - **字幕提取**：
+     - 优先使用 `ffmpeg-python` 提取视频内嵌字幕（支持 SRT、VTT、ASS、SSA 等格式）
+     - 如果没有内嵌字幕，使用 Whisper 生成带时间戳的字幕
+     - 返回格式：`List[Dict[str, Any]]`，每个字典包含 `text`、`start_time`、`end_time`
+   - **语音转录**：
+     - 优先使用 Whisper 进行语音识别（自动语言检测）
+     - 如果 Whisper 失败，回退到 SpeechRecognition
+     - 返回格式：`str`，完整的语音转录文本
+   - 返回格式：`{"subtitles": [...], "transcript": "..."}`
 
-   - 优先使用 Whisper 进行语音识别
-   - 如果 Whisper 失败，回退到 SpeechRecognition
-   - 返回格式：`str`，完整的语音转录文本
+2. **音频内容提取器** (`AudioContentExtractor`)：
 
-3. **异常处理**：
+   - **语音转录**：
+     - 优先使用 Whisper 进行语音识别（自动语言检测）
+     - 如果 Whisper 失败，回退到 SpeechRecognition
+     - 返回格式：`str`，完整的语音转录文本
+   - 返回格式：`{"transcript": "..."}`（音频没有字幕）
+
+3. **自动语言检测**：
+
+   - Whisper 支持自动检测 99 种语言，无需手动配置
+   - 检测到的语言会在日志中记录，便于调试和监控
+   - 如果使用 SpeechRecognition（备选方案），则使用固定默认值 `zh-CN`
+
+4. **异常处理**：
    - 所有方法都包含完整的异常处理和日志记录
    - 确保异常时能正确回退到备选方案
    - 临时文件会在 `finally` 块中确保清理

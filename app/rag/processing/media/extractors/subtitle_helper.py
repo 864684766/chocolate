@@ -6,7 +6,7 @@ import logging
 import tempfile
 import os
 from pathlib import Path
-from typing import List, Dict, Any, Optional, TYPE_CHECKING
+from typing import List, Dict, Any, TYPE_CHECKING
 
 # 尝试导入 ffmpeg-python 包（安装后导入名为 ffmpeg）
 # 注意：ffmpeg-python 是 PyPI 包名，导入时使用 import ffmpeg
@@ -37,7 +37,7 @@ def _get_temp_dir() -> Path:
     """
     获取临时文件目录路径
     
-    用处：从配置文件中读取临时文件目录路径。
+    用处：从配置文件中读取临时文件目录路径，供视频和音频处理共用。
     必须在配置文件中明确指定 temp_dir 路径，如果为空或未配置则抛出异常。
     
     Returns:
@@ -50,14 +50,14 @@ def _get_temp_dir() -> Path:
     try:
         from app.config import get_config_manager
         config_manager = get_config_manager()
-        video_config = config_manager.get_video_processing_config()
-        temp_dir_path = video_config.get("temp_dir", "").strip()
+        media_config = config_manager.get_media_processing_config()
+        temp_dir_path = media_config.get("temp_dir", "").strip()
         
         # 如果配置中未指定路径或为空，抛出异常
         if not temp_dir_path:
             raise ValueError(
                 "临时文件目录未配置。请在 config/app_config.json 的 "
-                "media_processing.video_processing.temp_dir 中指定临时文件目录路径。"
+                "media_processing.temp_dir 中指定临时文件目录路径。"
             )
         
         # 使用配置的路径，支持 ~ 展开（跨平台）
@@ -295,19 +295,17 @@ def _srt_time_to_seconds(time_str: str) -> float:
 
 def generate_subtitles_with_whisper(
     video_path: str, 
-    model_name: str = "base",
-    language: Optional[str] = None
+    model_name: str = "base"
 ) -> List[Dict[str, Any]]:
     """
     使用 Whisper 生成带时间戳的字幕
     
     用处：当视频没有内嵌字幕时，使用 Whisper 进行语音识别
-    并生成带时间戳的字幕数据。
+    并生成带时间戳的字幕数据。Whisper 会自动检测语言。
     
     Args:
         video_path: 视频文件路径
         model_name: Whisper 模型名称（如 "base", "small", "medium"）
-        language: 语言代码（如 "zh", "en"），None 表示自动检测
         
     Returns:
         List[Dict[str, Any]]: 字幕列表，每个字典包含 text、start_time、end_time
@@ -329,12 +327,9 @@ def generate_subtitles_with_whisper(
             model_type=ModelType.WHISPER
         )
         model = ModelLoader.load_model(config)
-        transcribe_options = {}
-        if language:
-            transcribe_options['language'] = language
         
-        # 使用 audio 参数明确指定音频/视频文件路径
-        result = model.transcribe(audio=video_path, **transcribe_options)
+        # 不传递 language 参数，让 Whisper 自动检测语言
+        result = model.transcribe(audio=video_path)
         
         # 从 segments 中提取字幕
         segments = result.get('segments', [])

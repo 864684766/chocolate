@@ -65,6 +65,18 @@ app/
 │   │   └── example.py            # 日志使用示例
 │   ├── tokenization/       # 分词计数（复用应用层模型配置）
 │   │   └── provider.py           # TokenCounter：openai→tiktoken；hf→AutoTokenizer
+│   ├── models/             # 通用模型加载器
+│   │   ├── __init__.py
+│   │   ├── registry.py           # 模型加载器注册表
+│   │   ├── examples.py           # 使用示例
+│   │   └── loaders/              # 模型加载器实现
+│   │       ├── __init__.py
+│   │       ├── base.py           # 加载器基类和核心类
+│   │       ├── sentence_transformer.py # SentenceTransformer 加载器
+│   │       ├── transformers.py   # Transformers 加载器
+│   │       ├── whisper.py        # Whisper 加载器
+│   │       ├── clip.py           # CLIP 加载器
+│   │       └── cross_encoder.py   # CrossEncoder 加载器
 │   └── __init__.py
 ├── rag/                    # RAG相关功能
 │   ├── data_ingestion/     # 数据接入层
@@ -91,7 +103,9 @@ app/
 │   │   │       ├── factory.py    # 提取器工厂
 │   │   │       ├── image_vision.py # 图像视觉理解提取器
 │   │   │       ├── image_ocr.py  # 图像OCR提取器
-│   │   │       └── video.py      # 视频内容提取器
+│   │   │       ├── video.py      # 视频内容提取器
+│   │   │       ├── audio.py      # 音频内容提取器
+│   │   │       └── audio_video_base.py # 音频和视频提取器基类
 │   │   ├── interfaces.py   # 接口定义
 │   │   ├── pipeline.py     # 处理流水线
 │   │   ├── media_text.py   # 文本处理

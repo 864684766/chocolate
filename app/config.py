@@ -139,6 +139,17 @@ class ConfigManager:
         """获取视频处理配置"""
         return self.get_media_processing_config().get("video_processing", {})
 
+    def get_speech_recognition_config(self) -> Dict[str, Any]:
+        """获取语音识别配置
+        
+        用处：从 media_processing.speech_recognition 读取配置，
+        供视频和音频处理共用。
+        
+        Returns:
+            Dict[str, Any]: 语音识别配置字典，包含 model 等配置项
+        """
+        return self.get_media_processing_config().get("speech_recognition", {})
+
     def get_logging_config(self) -> Dict[str, Any]:
         """获取日志配置"""
         return self._config_data.get("logging", {})

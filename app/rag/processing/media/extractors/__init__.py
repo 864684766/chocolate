@@ -8,6 +8,8 @@ from .base import MediaExtractor
 from .image_vision import ImageVisionExtractor
 from .image_ocr import ImageOCRExtractor
 from .video import VideoContentExtractor
+from .audio import AudioContentExtractor
+from .audio_video_base import AudioVideoExtractorBase
 from .factory import MediaExtractorFactory
 
 __all__ = [
@@ -15,5 +17,7 @@ __all__ = [
     "ImageVisionExtractor",
     "ImageOCRExtractor", 
     "VideoContentExtractor",
+    "AudioContentExtractor",
+    "AudioVideoExtractorBase",
     "MediaExtractorFactory",
 ]
