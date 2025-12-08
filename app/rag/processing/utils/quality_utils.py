@@ -11,6 +11,8 @@ import logging
 import re
 from typing import Iterable, List, Tuple, Optional
 
+from app.infra.models import ModelLoader, ModelType, LoaderConfig
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,27 +30,115 @@ def normalize_caption(text: str) -> str:
     return (text or "").strip()
 
 
-def has_repeated_ngram(text: str, n: int = 3) -> bool:
-    """检测是否存在重复的 n-gram 片段（字符级）。
+def fix_repeated_segments(text: str, separators: str = "，,。.；;！!？?、") -> str:
+    """修复片段级重复（按分隔符分割，去除连续重复的片段）。
+    
+    用处：自动识别并去除文本中按分隔符（逗号、句号等）分割的重复片段，
+    例如 "山岳湖,前面有树,前面有树," 修复为 "山岳湖,前面有树,"。
+    
+    Args:
+        text (str): 需要修复的原始文本
+        separators (str, optional): 分隔符字符串，默认为 "，,。.；;！!？?、"
+        
+    Returns:
+        str: 修复后的文本，去除重复片段
+    """
+    if not text or len(text) < 2:
+        return text
+    
+    import re
+    # 按配置的分隔符分割文本
+    # 转义特殊字符并构建正则表达式
+    escaped_separators = re.escape(separators)
+    pattern = f'[{escaped_separators}]'
+    segments = re.split(pattern, text)
+    found_separators = re.findall(pattern, text)
+    
+    # 过滤空字符串，重组为 (内容, 分隔符) 对
+    parts: List[Tuple[str, str]] = []
+    for i, segment in enumerate(segments):
+        content = segment.strip()
+        if content:
+            # 获取对应的分隔符（如果有）
+            separator = found_separators[i] if i < len(found_separators) else ""
+            parts.append((content, separator))
+    
+    if not parts:
+        return text
+    
+    # 去除连续的重复片段
+    result_parts: List[Tuple[str, str]] = []
+    prev_content = None
+    
+    for content, separator in parts:
+        # 如果当前内容与前一个相同，跳过（去除重复）
+        if content == prev_content:
+            continue
+        result_parts.append((content, separator))
+        prev_content = content
+    
+    # 重组文本
+    if not result_parts:
+        return text
+    
+    result = "".join([content + sep for content, sep in result_parts])
+    return result.strip() if result.strip() else text
 
-    - 典型用于识别"self self self"这类重复结构。
-    - 返回 True 表示存在重复。
+
+def calculate_ngram_repetition_ratio(text: str, n: int = 3) -> float:
+    """计算 N-Gram 重复比率（0~1）。
+    
+    用处：计算文本中字符级 N-Gram 的重复比率，用于判断文本是否存在过度重复。
+    基于业界实践，重复比率 > 0.5 通常视为异常重复。
     
     Args:
         text (str): 需要检测的文本内容
         n (int, optional): n-gram 的长度，默认为 3。例如 n=3 时检测 3 个字符的重复片段
         
     Returns:
-        bool: True 表示存在重复的 n-gram 片段，False 表示没有重复
+        float: 重复比率，范围 0.0-1.0。0.0 表示没有重复，1.0 表示完全重复
     """
+    if not text or len(text) < n:
+        return 0.0
+    
     tokens = list(text)
-    seen: set = set()
+    ngram_counts: dict = {}
+    total_ngrams = 0
+    
+    # 统计所有 n-gram 的出现次数
     for i in range(0, max(0, len(tokens) - n + 1)):
         ng = tuple(tokens[i : i + n])
-        if ng in seen:
-            return True
-        seen.add(ng)
-    return False
+        ngram_counts[ng] = ngram_counts.get(ng, 0) + 1
+        total_ngrams += 1
+    
+    if total_ngrams == 0:
+        return 0.0
+    
+    # 计算重复的 n-gram 数量（出现次数 > 1 的 n-gram）
+    repeated_count = sum(count - 1 for count in ngram_counts.values() if count > 1)
+    
+    # 重复比率 = 重复的 n-gram 数量 / 总 n-gram 数量
+    return min(1.0, repeated_count / float(total_ngrams))
+
+
+def has_excessive_ngram_repetition(text: str, n: int = 3, threshold: float = 0.5) -> bool:
+    """检测是否存在过度的 N-Gram 重复（基于重复比率）。
+    
+    用处：判断文本是否存在过度的字符级重复，用于过滤垃圾文本。
+    基于业界实践，重复比率 > 0.5 通常视为异常重复。
+    
+    Args:
+        text (str): 需要检测的文本内容
+        n (int, optional): n-gram 的长度，默认为 3
+        threshold (float, optional): 重复比率阈值，默认为 0.5（50%）。超过此值视为过度重复
+        
+    Returns:
+        bool: True 表示存在过度重复，False 表示重复程度可接受
+    """
+    ratio = calculate_ngram_repetition_ratio(text, n)
+    return ratio > threshold
+
+
 
 def contains_blacklisted(text: str, keywords: Iterable[str]) -> bool:
     """检测是否包含黑名单关键词（大小写不敏感）。
@@ -136,6 +226,7 @@ def near_duplicate(c1: str, c2: str, threshold: float = 0.95, embed_model: Optio
 
     - 默认用多语言句向量模型计算相似度；相似度≥threshold 视为重复。
     - 依赖不可用时返回 False 并记录日志。
+    - 使用模块级模型缓存，避免重复加载相同模型。
     
     Args:
         c1 (str): 第一个文本内容
@@ -147,9 +238,22 @@ def near_duplicate(c1: str, c2: str, threshold: float = 0.95, embed_model: Optio
         bool: True 表示两个文本近似重复，False 表示不重复或检测失败
     """
     try:
-        from sentence_transformers import SentenceTransformer, util
-        model_name = embed_model or "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-        model = SentenceTransformer(model_name)
+        from sentence_transformers import util
+        
+        model_name = embed_model
+
+        if not model_name:
+            logger.info(f"sentence-transformers not available for near-dup: {model_name}")
+            return False
+        
+        # 使用通用模型加载器加载模型（自动缓存）
+        config = LoaderConfig(
+            model_name=model_name,
+            device="auto",
+            model_type=ModelType.SENTENCE_TRANSFORMER
+        )
+        model = ModelLoader.load_model(config)
+        
         emb = model.encode([c1, c2], convert_to_tensor=True, normalize_embeddings=True)
         sim = float(util.cos_sim(emb[0], emb[1]).item())
         return sim >= threshold
@@ -168,10 +272,13 @@ def filter_captions(
     blacklist_keywords: Optional[List[str]] = None,
     max_gibberish_ratio: float = 0.3,
     forbid_repeat_ngram: int = 3,
+    max_repetition_ratio: float = 0.5,
+    segment_separators: str = "，,。.；;！!？?、",
 ) -> List[str]:
     """基于规则的候选过滤。
 
-    - 长度阈值、黑名单（关键词/正则）、乱码占比、重复 n-gram。
+    - 先修复片段级重复，再进行质量检查。
+    - 长度阈值、黑名单（关键词/正则）、乱码占比、重复 n-gram 比率。
     - 返回通过过滤的 caption 列表。
     
     Args:
@@ -180,7 +287,9 @@ def filter_captions(
         max_len (int, optional): 最大长度阈值，默认为 120
         blacklist_keywords (Optional[List[str]], optional): 黑名单关键词列表，默认为 None
         max_gibberish_ratio (float, optional): 最大乱码占比阈值，默认为 0.3
-        forbid_repeat_ngram (int, optional): 禁止重复的 n-gram 长度，默认为 3。设为 0 表示不检查重复
+        forbid_repeat_ngram (int, optional): N-gram 长度，用于计算重复比率，默认为 3。设为 0 表示不检查重复
+        max_repetition_ratio (float, optional): 最大重复比率阈值，默认为 0.5（50%）。超过此值视为过度重复
+        segment_separators (str, optional): 片段分隔符字符串，用于修复片段级重复，默认为 "，,。.；;！!？?、"
         
     Returns:
         List[str]: 通过所有过滤条件的文本列表
@@ -188,17 +297,31 @@ def filter_captions(
     blacklist_keywords = blacklist_keywords or []
     kept: List[str] = []
     for c in captions:
+        # 第一步：标准化
         c = normalize_caption(c)
         if not c:
             continue
+        
+        # 第二步：修复片段级重复（使用配置的分隔符）
+        c = fix_repeated_segments(c, separators=segment_separators)
+        
+        # 第三步：长度检查
         if len(c) < min_len or len(c) > max_len:
             continue
+        
+        # 第四步：黑名单检查
         if hits_blacklist_regex(c) or contains_blacklisted(c, blacklist_keywords):
             continue
+        
+        # 第五步：乱码占比检查
         if gibberish_ratio(c) > max_gibberish_ratio:
             continue
-        if forbid_repeat_ngram and has_repeated_ngram(c, n=forbid_repeat_ngram):
-            continue
+        
+        # 第六步：字符级重复比率检查（修复后仍可能存在的字符级重复）
+        if forbid_repeat_ngram > 0:
+            if has_excessive_ngram_repetition(c, n=forbid_repeat_ngram, threshold=max_repetition_ratio):
+                continue
+        
         kept.append(c)
     return kept
 
@@ -253,10 +376,15 @@ def clip_rerank(image, captions: List[str], model_name: str, top_k: int = 2) -> 
         List[Tuple[str, float]]: 重排后的结果列表，每个元素为 (文本描述, 相似度概率)
     """
     try:
-        from transformers import CLIPProcessor, CLIPModel
         import torch
-        clip_model = CLIPModel.from_pretrained(model_name)
-        processor = CLIPProcessor.from_pretrained(model_name)
+        
+        # 使用通用模型加载器加载 CLIP 模型和处理器（自动缓存）
+        config = LoaderConfig(
+            model_name=model_name,
+            device="auto",
+            model_type=ModelType.CLIP
+        )
+        clip_model, processor = ModelLoader.load_model(config)
         inputs = processor(text=captions, images=image, return_tensors="pt", padding=True)
         with torch.no_grad():
             outputs = clip_model(**inputs)

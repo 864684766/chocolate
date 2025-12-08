@@ -6,8 +6,8 @@ import logging
 from typing import Dict, Any, List, Tuple
 from .base import MediaExtractor
 from app.config import get_config_manager
+from app.infra.models import ModelLoader, ModelType, LoaderConfig
 from ...utils.quality_utils import (
-    filter_captions,
     clip_rerank,
 )
 
@@ -113,8 +113,7 @@ class ImageVisionExtractor(MediaExtractor):
         # 可选：英文→中文翻译
         captions = self._translate_en_to_zh(captions)
         
-        # 对翻译后的中文内容进行去重
-        captions = self._deduplicate_translated_captions(captions)
+        # 去重和清洗逻辑已移至 pipeline 统一处理，此处不再处理
 
         return {
             "captions": captions,
@@ -153,18 +152,7 @@ class ImageVisionExtractor(MediaExtractor):
             model_name, image, num_captions, max_length, temperature, do_sample
         )
 
-        # 2) 规则过滤（长度/黑名单/乱码）
-        if captions:
-            captions = filter_captions(
-                captions,
-                min_len=int(filter_config.get("min_length", 5)),
-                max_len=int(filter_config.get("max_length", 120)),
-                blacklist_keywords=list(filter_config.get("blacklist_keywords", [])),
-                max_gibberish_ratio=float(filter_config.get("max_gibberish_ratio", 0.3)),
-                forbid_repeat_ngram=0,  # 英文阶段不检测重复片段，移到翻译后
-            )
-
-        # 3) 英文去重已移除，改为翻译后统一去重
+        # 2) 规则过滤和去重已移至 pipeline 统一处理，此处不再处理
 
         # 4) 可选：CLIP 粗排并阈值过滤，提升图像一致性
         captions = self._rerank_with_clip(image, captions)
@@ -194,9 +182,15 @@ class ImageVisionExtractor(MediaExtractor):
         Returns:
             List[str]: 生成的图像描述文本列表
         """
-        from transformers import pipeline  # type: ignore[import-untyped]
         captions: List[str] = []
-        cap_pipe = pipeline("image-to-text", model=model_name)
+        # 使用统一的模型加载器加载 pipeline
+        config = LoaderConfig(
+            model_name=model_name,
+            model_type=ModelType.TRANSFORMERS,
+            task="image-to-text",
+            device="auto"
+        )
+        cap_pipe = ModelLoader.load_model(config)
         # 优先使用文档建议的 generate_kwargs 传参；若版本不支持则回退到多次调用
         try:
             out = cap_pipe(
@@ -312,10 +306,16 @@ class ImageVisionExtractor(MediaExtractor):
         try:
             model_path = translation_cfg.get("model", "Helsinki-NLP/opus-mt-en-zh")
             batch_size = int(translation_cfg.get("batch_size", 16))
-            from transformers import pipeline  # type: ignore[import-untyped]
-            # 使用稳定的通用任务名 "translation"，并显式传入 src_lang/tgt_lang，
-            # 以匹配 transformers 的类型签名（Literal["translation"], str, ...）
-            translator = pipeline("translation", model=model_path, src_lang="en", tgt_lang="zh")
+            # 使用统一的模型加载器加载 translation pipeline
+            config = LoaderConfig(
+                model_name=model_path,
+                model_type=ModelType.TRANSFORMERS,
+                task="translation",
+                device="auto",
+                src_lang="en",
+                tgt_lang="zh"
+            )
+            translator = ModelLoader.load_model(config)
 
             zh_captions: List[str] = []
             for i in range(0, len(captions), batch_size):
@@ -341,56 +341,3 @@ class ImageVisionExtractor(MediaExtractor):
             raise
         return captions
 
-    # 对翻译后的中文内容进行去重
-    def _deduplicate_translated_captions(self, captions: List[str]) -> List[str]:
-        """
-        对翻译后的中文描述进行去重处理和质量过滤。
-        
-        用处：翻译模型可能产生重复或高度相似的中文内容，通过精确去重、近似去重
-        和重复片段检测来减少冗余，提升最终内容质量。
-        
-        Args:
-            captions: 翻译后的中文描述列表
-            
-        Returns:
-            去重和过滤后的中文描述列表
-        """
-        if not captions:
-            return captions
-        
-        # 1) 先进行重复片段检测和质量过滤
-        from ...utils.quality_utils import dedup_captions, filter_captions
-        
-        filter_config = self._caption_config.get("filters", {})
-        dedup_config = self._caption_config.get("deduplication", {})
-        captions = filter_captions(
-            captions,
-            min_len=int(filter_config.get("min_length", 5)),
-            max_len=int(filter_config.get("max_length", 120)),
-            blacklist_keywords=list(filter_config.get("blacklist_keywords", [])),
-            max_gibberish_ratio=float(filter_config.get("max_gibberish_ratio", 0.3)),
-            forbid_repeat_ngram=int(dedup_config.get("forbid_repeat_ngram", 3)),  # 在中文上检测重复片段
-        )
-        
-        # 2) 再进行内容去重
-        dedup_config = self._caption_config.get("deduplication", {})
-        approx_enabled = dedup_config.get("approximate_enabled", True)
-        threshold = dedup_config.get("similarity_threshold", 0.95)
-        embed_model = dedup_config.get("embed_model", None)
-        
-        try:
-            deduplicated = dedup_captions(
-                captions,
-                approx=approx_enabled,
-                threshold=threshold,
-                embed_model=embed_model
-            )
-            
-            if len(deduplicated) < len(captions):
-                logger.info(f"中文描述处理完成：{len(captions)} -> {len(deduplicated)} 条描述")
-            
-            return deduplicated
-            
-        except Exception as e:
-            logger.warning(f"中文描述去重失败，返回过滤后内容: {e}")
-            return captions

@@ -16,6 +16,7 @@ from typing import List, Optional
 from .schemas import RetrievedItem
 from app.infra.logging import get_logger
 from app.config import get_config_manager
+from app.infra.models import ModelLoader, ModelType, LoaderConfig
 
 
 class CrossEncoderReranker:
@@ -30,11 +31,20 @@ class CrossEncoderReranker:
         self.logger = get_logger(__name__)
 
     def _load_model(self) -> None:
+        """加载 CrossEncoder 模型
+        
+        用处：使用通用模型加载器加载 CrossEncoder 模型，自动处理缓存。
+        """
         if self._model is not None:
             return
         try:
-            from sentence_transformers import CrossEncoder  # type: ignore
-            self._model = CrossEncoder(self.model)
+            # 使用通用模型加载器加载模型（自动缓存）
+            config = LoaderConfig(
+                model_name=self.model,
+                device="auto",
+                model_type=ModelType.CROSS_ENCODER
+            )
+            self._model = ModelLoader.load_model(config)
         except Exception as e:
             self.logger.warning(f"CrossEncoder load failed ({self.model}): {e}; fallback to score sort.")
             self._model = None

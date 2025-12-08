@@ -9,6 +9,7 @@ from .media.chunking import ChunkingStrategyFactory
 from .media.extractors import MediaExtractorFactory
 from .utils.chunking import decide_chunk_params
 from .metadata_manager import MetadataManager
+from .utils.text_cleaner import TextCleaner
 
 
 class ProcessingPipeline:
@@ -46,6 +47,7 @@ class ProcessingPipeline:
         self.quality = quality
         self.metadata_manager = MetadataManager()
         self.use_media_chunking = use_media_chunking
+        self.text_cleaner = TextCleaner()
 
     def run(self, samples: List[RawSample]) -> List[ProcessedChunk]:
         """
@@ -110,7 +112,8 @@ class ProcessingPipeline:
         Returns:
             List[ProcessedChunk]: 处理后的文本块列表，每个块包含文本内容和元数据
         """
-        cleaned = self.lang.clean(extracted.get("text", ""))
+        # 使用统一的文本清洗器进行清洗
+        cleaned = self.text_cleaner.clean(extracted.get("text", ""))
         if not cleaned:
             return []
         parts = self.lang.chunk(cleaned)
@@ -157,6 +160,9 @@ class ProcessingPipeline:
         meta = extracted.get("meta", {})
         media_type = meta.get("media_type", "text")
         content = extracted.get("content", extracted.get("text", ""))
+        
+        # 对媒体提取的内容进行清洗和去重处理
+        content = self._clean_media_content(content, media_type)
 
         # 计算分块参数：从核心 chunking 模块获取（可配置+自适应）
         chunk_size, overlap = decide_chunk_params(str(media_type), content)
@@ -172,12 +178,103 @@ class ProcessingPipeline:
         chunks: List[ProcessedChunk] = []
         for chunk_result in chunk_results:
             chunk_text = chunk_result["text"]
+            # 对每个chunk的文本进行清洗
+            chunk_text = self.text_cleaner.clean(chunk_text)
+            if not chunk_text:
+                continue
             chunk_meta = self.metadata_manager.build_metadata(
                 chunk_result.get("meta", {}),
                 text=chunk_text
             )
             chunks.append(ProcessedChunk(text=chunk_text, meta=chunk_meta))
         return chunks
+    
+    def _clean_media_content(self, content: Any, media_type: str) -> Any:
+        """
+        清洗媒体提取的内容
+        
+        用处：根据媒体类型对提取的内容进行清洗和去重处理。
+        对于文本类型内容，进行清洗和去重；对于结构化内容（如字幕列表），
+        提取文本后进行清洗和去重。
+        
+        Args:
+            content: 媒体提取的内容，可能是字符串、列表或字典
+            media_type: 媒体类型（image/video/audio/pdf等）
+            
+        Returns:
+            any: 清洗和去重后的内容，保持原有结构
+        """
+        if isinstance(content, str):
+            # 单个文本：清洗即可
+            return self.text_cleaner.clean(content)
+        elif isinstance(content, list):
+            # 列表类型（如字幕列表、描述列表等）
+            if not content:
+                return content
+            # 如果是字符串列表，进行清洗和去重
+            if isinstance(content[0], str):
+                return self.text_cleaner.clean_and_deduplicate(content)
+            # 如果是字典列表（如字幕、OCR结果等），提取文本字段进行清洗和去重
+            elif isinstance(content[0], dict):
+                # 提取所有文本字段，建立原文本到原项的映射
+                original_texts = []
+                text_to_item: Dict[str, Dict[str, Any]] = {}
+                for item in content:
+                    if isinstance(item, dict):
+                        # 提取常见的文本字段（支持多种字段名：text/caption/content/transcript）
+                        text = item.get("text") or item.get("caption") or item.get("content") or item.get("transcript", "")
+                        if text:
+                            text_str = str(text).strip()
+                            if text_str:
+                                original_texts.append(text_str)
+                                # 如果同一个文本出现多次，保留第一个
+                                if text_str not in text_to_item:
+                                    text_to_item[text_str] = item
+                
+                if not original_texts:
+                    return content
+                
+                # 清洗和去重文本列表
+                cleaned_texts = self.text_cleaner.clean_and_deduplicate(original_texts)
+                
+                # 建立清洗后文本到原文本的映射（通过文本匹配）
+                # 由于去重可能导致数量减少，需要找到每个清洗后文本对应的原文本
+                cleaned_to_original: Dict[str, str] = {}
+                seen_cleaned = set()
+                
+                # 先清洗所有原文本，建立映射
+                for orig_text in original_texts:
+                    cleaned = self.text_cleaner.clean(orig_text)
+                    if cleaned and cleaned not in seen_cleaned:
+                        cleaned_to_original[cleaned] = orig_text
+                        seen_cleaned.add(cleaned)
+                
+                # 构建结果列表：只保留去重后的项，并更新文本字段
+                result = []
+                for cleaned_text in cleaned_texts:
+                    # 找到对应的原文本
+                    original_text = cleaned_to_original.get(cleaned_text)
+                    if original_text and original_text in text_to_item:
+                        # 取对应的原项，更新文本字段
+                        item = dict(text_to_item[original_text])
+                        # 确定文本字段名
+                        text_key = "text" if "text" in item else ("caption" if "caption" in item else ("content" if "content" in item else "transcript"))
+                        if text_key in item:
+                            item[text_key] = cleaned_text
+                        result.append(item)
+                
+                return result
+        elif isinstance(content, dict):
+            # 字典类型：递归处理所有文本字段
+            result = {}
+            for key, value in content.items():
+                if isinstance(value, (str, list)):
+                    result[key] = self._clean_media_content(value, media_type)
+                else:
+                    result[key] = value
+            return result
+        
+        return content
 
     # 说明：分块参数算法已抽到 app.core.chunking 模块复用
 

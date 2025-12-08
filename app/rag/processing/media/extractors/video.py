@@ -255,7 +255,7 @@ class VideoContentExtractor(MediaExtractor):
         Args:
             content: 视频文件的二进制内容
             meta: 视频元数据，用于确定文件扩展名
-            
+        
         Returns:
             str: 临时文件路径
         """
@@ -394,8 +394,14 @@ class VideoContentExtractor(MediaExtractor):
         except Exception as e:
             logger.debug(f"Failed to get config, using defaults: {e}")
         
-        # 加载模型并转录音频
-        model = whisper.load_model(model_name)
+        # 使用通用模型加载器加载 Whisper 模型（自动缓存）
+        from app.infra.models import ModelLoader, ModelType, LoaderConfig
+        config = LoaderConfig(
+            model_name=model_name,
+            device="auto",
+            model_type=ModelType.WHISPER
+        )
+        model = ModelLoader.load_model(config)
         transcribe_options = {}
         if language:
             transcribe_options['language'] = language
@@ -447,13 +453,13 @@ class VideoContentExtractor(MediaExtractor):
             logger.debug(f"Failed to get language config, using default: {e}")
         
         # 进行语音识别
-        recognizer = sr.Recognizer()
+            recognizer = sr.Recognizer()
         with sr.AudioFile(video_path) as source:
-            audio = recognizer.record(source)
+                audio = recognizer.record(source)
         
         text = recognizer.recognize_google(audio=audio, language=language)
         
         if not text:
             logger.warning("SpeechRecognition returned empty text")
         
-        return text
+            return text

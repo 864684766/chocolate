@@ -321,7 +321,14 @@ def generate_subtitles_with_whisper(
     subtitles = []
     
     try:
-        model = whisper.load_model(model_name)
+        # 使用通用模型加载器加载 Whisper 模型（自动缓存）
+        from app.infra.models import ModelLoader, ModelType, LoaderConfig
+        config = LoaderConfig(
+            model_name=model_name,
+            device="auto",
+            model_type=ModelType.WHISPER
+        )
+        model = ModelLoader.load_model(config)
         transcribe_options = {}
         if language:
             transcribe_options['language'] = language

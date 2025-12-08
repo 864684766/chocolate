@@ -5,6 +5,7 @@
 - 数据处理层: [processing.md](processing.md)
 - 向量化层: [vectorization.md](vectorization.md)
 - 检索层: [retrieval.md](retrieval.md)
+- 模型加载器: [model_loader.md](model_loader.md)
 
 ## Ingestion 配置（元数据与关键词）
 

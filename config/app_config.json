@@ -302,7 +302,9 @@
         "approximate_enabled": true,
         "similarity_threshold": 0.95,
         "embed_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        "forbid_repeat_ngram": 3
+        "forbid_repeat_ngram": 3,
+        "max_repetition_ratio": 0.5,
+        "segment_separators": "，,。.；;！!？?、"
       }
     },
     "ocr": {

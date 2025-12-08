@@ -23,11 +23,30 @@ class HFChat(ChatModel):
         self._model = None
 
     def _load(self) -> None:
+        """懒加载 tokenizer 与模型
+        
+        用处：使用通用模型加载器加载模型和 tokenizer，自动处理缓存。
+        """
         if self._tokenizer is not None and self._model is not None:
             return
+        
+        from app.infra.models import ModelLoader, ModelType, LoaderConfig
+        
         dtype = _dtype_from_str(self.torch_dtype)
-        self._tokenizer = AutoTokenizer.from_pretrained(self.model)
-        self._model = AutoModelForCausalLM.from_pretrained(self.model, torch_dtype=dtype, device_map=self.device_map)
+        dtype_str = "float16" if dtype == torch.float16 else ("bfloat16" if dtype == torch.bfloat16 else "float32")
+        
+        # 使用通用模型加载器加载模型和 tokenizer（自动缓存）
+        config = LoaderConfig(
+            model_name=self.model,
+            device="auto",
+            model_type=ModelType.TRANSFORMERS,
+            model_class="AutoModelForCausalLM",
+            tokenizer_class="AutoTokenizer",
+            return_tokenizer=True,
+            torch_dtype=dtype_str,
+            device_map=self.device_map
+        )
+        self._model, self._tokenizer = ModelLoader.load_model(config)
 
     #  noinspection PyProtocol
     def generate(self, messages: Sequence[Mapping[str, Any]], **kwargs: Any) -> Mapping[str, Any]:

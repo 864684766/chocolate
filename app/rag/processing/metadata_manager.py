@@ -80,7 +80,7 @@ class MetadataManager:
             content_type: MIME 类型
             source: 数据来源
             extra: 额外的元数据（可选）
-        
+            
         Returns:
             Dict[str, Any]: 经过白名单过滤的元数据
         """
@@ -97,7 +97,7 @@ class MetadataManager:
         Args:
             text: 当前 chunk 的文本
             meta: 已经规范化的元数据（用于质量评估参考）
-        
+            
         Returns:
             Dict[str, Any]: 仅包含白名单允许的文本派生字段
         """
@@ -131,7 +131,7 @@ class MetadataManager:
         Args:
             field: 字段名称
             value: 原始值
-        
+            
         Returns:
             Any: 转换后的值，若无法转换则返回 None
         """
