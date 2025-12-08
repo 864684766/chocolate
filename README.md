@@ -96,7 +96,9 @@ app/
 │   │   │   │   ├── text.py       # 文本分块策略
 │   │   │   │   ├── pdf.py        # PDF分块策略
 │   │   │   │   ├── image.py      # 图像分块策略
-│   │   │   │   └── video.py      # 视频分块策略
+│   │   │   │   ├── video.py      # 视频分块策略
+│   │   │   │   ├── audio.py      # 音频分块策略
+│   │   │   │   └── audio_video_base.py # 音频和视频分块策略基类
 │   │   │   └── extractors/       # 媒体内容提取器
 │   │   │       ├── __init__.py
 │   │   │       ├── base.py       # 提取器基类

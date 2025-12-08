@@ -3,34 +3,37 @@
 """
 
 from typing import List, Dict, Any
-from .base import MediaChunkingStrategy
-from .text import TextChunkingStrategy
+from .audio_video_base import AudioVideoChunkingStrategyBase
 
 
-class VideoChunkingStrategy(MediaChunkingStrategy):
+class VideoChunkingStrategy(AudioVideoChunkingStrategyBase):
     """视频分块策略 - 基于字幕和时间戳"""
     
     def __init__(self, chunk_size: int = 800, overlap: int = 150):
         """
         初始化视频分块策略
         
+        用处：设置视频内容的分块参数，用于后续的字幕和转录文本分块处理。
+        
         Args:
             chunk_size: 分块大小
             overlap: 重叠大小
         """
-        self.chunk_size = chunk_size
-        self.overlap = overlap
+        super().__init__(chunk_size, overlap)
     
     def chunk(self, content: Dict[str, Any], meta: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         视频内容分块，基于字幕和时间信息
+        
+        用处：从视频内容中提取字幕或转录文本进行分块处理，
+        优先使用带时间戳的字幕信息，如果没有字幕则使用语音转写结果。
         
         Args:
             content: 视频内容，应包含字幕和可能的语音转写结果
             meta: 元数据
             
         Returns:
-            List[Dict[str, Any]]: 分块结果列表
+            List[Dict[str, Any]]: 分块结果列表，每个字典包含 "text" 和 "meta" 键
         """
         # content 应该包含字幕和可能的语音转写结果
         subtitles = content.get("subtitles", [])
@@ -40,24 +43,27 @@ class VideoChunkingStrategy(MediaChunkingStrategy):
         chunk_index = 0
         
         if subtitles:
-            # 优先使用字幕信息
+            # 优先使用字幕信息（带时间戳）
             chunks.extend(self._chunk_by_subtitles(subtitles, chunk_index))
         elif transcript:
-            # 回退到语音转写结果
-            chunks.extend(self._chunk_by_transcript(transcript, chunk_index))
+            # 回退到语音转写结果（使用基类的公共方法）
+            chunks.extend(self._chunk_by_transcript(transcript, chunk_index, chunk_type="video_transcript"))
         
         return chunks
     
     def _chunk_by_subtitles(self, subtitles: List[Dict[str, Any]], start_index: int) -> List[Dict[str, Any]]:
         """
-        基于字幕分块
+        基于字幕分块（视频特有）
+        
+        用处：根据字幕的时间戳信息进行分块，保留时间信息，
+        这是视频特有的功能，音频没有字幕。
         
         Args:
-            subtitles: 字幕列表
+            subtitles: 字幕列表，每个字典包含 text、start_time、end_time
             start_index: 起始索引
             
         Returns:
-            List[Dict[str, Any]]: 分块结果列表
+            List[Dict[str, Any]]: 分块结果列表，每个字典包含 "text" 和 "meta" 键
         """
         chunks = []
         current_chunk = ""
@@ -115,26 +121,3 @@ class VideoChunkingStrategy(MediaChunkingStrategy):
         
         return chunks
     
-    def _chunk_by_transcript(self, transcript: str, start_index: int) -> List[Dict[str, Any]]:
-        """
-        基于语音转写结果分块
-        
-        Args:
-            transcript: 语音转写文本
-            start_index: 起始索引
-            
-        Returns:
-            List[Dict[str, Any]]: 分块结果列表
-        """
-        # 使用文本分块策略
-        text_strategy = TextChunkingStrategy(self.chunk_size, self.overlap)
-        text_chunks = text_strategy.chunk(transcript, {})
-        
-        # 转换元数据格式
-        for i, chunk in enumerate(text_chunks):
-            chunk["meta"].update({
-                "chunk_index": start_index + i,
-                "chunk_type": "video_transcript",
-            })
-        
-        return text_chunks
