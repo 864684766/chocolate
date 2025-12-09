@@ -4,10 +4,12 @@
 
 from .base import MediaChunkingStrategy
 from .text import TextChunkingStrategy
-from .pdf import PDFChunkingStrategy
-from .image import ImageChunkingStrategy
-from .video import VideoChunkingStrategy
-from .audio import AudioChunkingStrategy
+from .office.pdf import PDFChunkingStrategy
+from .office.word import WordChunkingStrategy
+from .office.excel import ExcelChunkingStrategy
+from .image.image import ImageChunkingStrategy
+from .audio_video.video import VideoChunkingStrategy
+from .audio_video.audio import AudioChunkingStrategy
 
 
 class ChunkingStrategyFactory:
@@ -23,10 +25,10 @@ class ChunkingStrategyFactory:
         根据媒体类型创建对应的分块策略
         
         用处：根据媒体类型选择合适的分块策略，
-        支持文本、PDF、图像、视频、音频等多种媒体类型。
+        支持文本、PDF、Word、Excel、图像、视频、音频等多种媒体类型。
         
         Args:
-            media_type: 媒体类型，如 "text", "pdf", "image", "video", "audio"
+            media_type: 媒体类型，如 "text", "pdf", "word", "excel", "image", "video", "audio"
             **kwargs: 传递给策略构造函数的参数（如 chunk_size, overlap）
             
         Returns:
@@ -34,7 +36,10 @@ class ChunkingStrategyFactory:
         """
         strategies = {
             "text": TextChunkingStrategy,
+            "markdown": TextChunkingStrategy,  # markdown提取后是纯文本，使用文本分块策略
             "pdf": PDFChunkingStrategy,
+            "word": WordChunkingStrategy,
+            "excel": ExcelChunkingStrategy,
             "image": ImageChunkingStrategy,
             "video": VideoChunkingStrategy,
             "audio": AudioChunkingStrategy,  # 音频使用专门的分块策略

@@ -4,8 +4,8 @@
 
 import logging
 from typing import Dict, Any, List, Optional
-from .base import MediaExtractor
-from .image_vision import ImageVisionExtractor
+from ..base import MediaExtractor
+from .vision import ImageVisionExtractor
 from app.config import get_config_manager
 
 logger = logging.getLogger(__name__)

@@ -349,4 +349,3 @@ def generate_subtitles_with_whisper(
         logger.warning(f"Failed to generate subtitles with Whisper: {e}")
     
     return subtitles
-

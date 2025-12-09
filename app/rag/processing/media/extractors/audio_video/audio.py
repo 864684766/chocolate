@@ -4,7 +4,7 @@
 
 import logging
 from typing import Dict, Any
-from .audio_video_base import AudioVideoExtractorBase
+from .base import AudioVideoExtractorBase
 
 logger = logging.getLogger(__name__)
 
@@ -102,4 +102,3 @@ class AudioContentExtractor(AudioVideoExtractorBase):
             # 使用基类方法清理临时文件
             if temp_file_path:
                 AudioVideoExtractorBase._cleanup_temp_file(temp_file_path)
-

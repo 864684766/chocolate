@@ -5,8 +5,8 @@
 """
 
 from typing import List, Dict, Any
-from .base import MediaChunkingStrategy
-from .text import TextChunkingStrategy
+from ..base import MediaChunkingStrategy
+from ..text import TextChunkingStrategy
 
 
 class AudioVideoChunkingStrategyBase(MediaChunkingStrategy):
@@ -87,4 +87,3 @@ class AudioVideoChunkingStrategyBase(MediaChunkingStrategy):
             })
         
         return text_chunks
-

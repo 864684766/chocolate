@@ -6,11 +6,11 @@
 
 from .base import MediaChunkingStrategy
 from .text import TextChunkingStrategy
-from .pdf import PDFChunkingStrategy
-from .image import ImageChunkingStrategy
-from .video import VideoChunkingStrategy
-from .audio import AudioChunkingStrategy
-from .audio_video_base import AudioVideoChunkingStrategyBase
+from .office.pdf import PDFChunkingStrategy
+from .image.image import ImageChunkingStrategy
+from .audio_video.video import VideoChunkingStrategy
+from .audio_video.audio import AudioChunkingStrategy
+from .audio_video.base import AudioVideoChunkingStrategyBase
 from .factory import ChunkingStrategyFactory
 
 __all__ = [

@@ -60,7 +60,7 @@ def _media_map_from_config() -> Dict[str, str]:
 
 def detect_media_type(filename: str, content_type: Optional[str]) -> str:
     """根据 content_type 与文件后缀推断媒体类型。
-    结果仅用于路由处理：image | video | audio | pdf | text
+    结果仅用于路由处理：image | video | audio | pdf | word | excel | markdown | text
     """
     if content_type:
         ct = content_type.lower()
@@ -72,12 +72,40 @@ def detect_media_type(filename: str, content_type: Optional[str]) -> str:
             return "audio"
         if ct == "application/pdf":
             return "pdf"
+        # Word文档的常见content_type
+        if ct in ["application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
+            return "word"
+        # Excel文档的常见content_type
+        if ct in ["application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]:
+            return "excel"
         if ct.startswith("text/"):
+            # 检查文件扩展名，如果是.md则返回markdown
+            _, ext = os.path.splitext(filename.lower())
+            if ext == ".md":
+                return "markdown"
             return "text"
 
     _, ext = os.path.splitext(filename.lower())
+    # 优先检查扩展名映射
     mapping = _media_map_from_config()
-    return mapping.get(ext, "text")
+    media_type = mapping.get(ext, "text")
+    
+    # 处理配置中的类型映射：document -> word
+    if media_type == "document":
+        return "word"
+    
+    # 根据扩展名直接判断Office文档类型（如果配置中没有明确映射）
+    if media_type == "text":
+        if ext == ".pdf":
+            return "pdf"
+        elif ext in [".doc", ".docx"]:
+            return "word"
+        elif ext in [".xls", ".xlsx"]:
+            return "excel"
+        elif ext == ".md":
+            return "markdown"
+    
+    return media_type
 
 
 async def build_upload_items(accepted: List[UploadFile], dataset: Optional[str]) -> List[UploadItem]:

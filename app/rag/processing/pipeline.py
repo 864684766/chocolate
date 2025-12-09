@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from typing import List, Dict, Any
 
-from .interfaces import RawSample, ProcessedChunk, MediaExtractor, LanguageProcessor, QualityAssessor
-from .media_text import PlainTextExtractor
-from .lang_zh import ChineseProcessor
+from .interfaces import RawSample, ProcessedChunk, MediaExtractor, QualityAssessor
+from .media.extractors.text.plain_text import PlainTextExtractor
 from .media.chunking import ChunkingStrategyFactory
 from .media.extractors import MediaExtractorFactory
 from .utils.chunking import decide_chunk_params
@@ -16,13 +15,13 @@ class ProcessingPipeline:
     """将 raw samples 转换为文本块的最小流水线实现。
 
     - MediaExtractor: 将二进制样本转成 text + meta 或媒体特定结构
-    - LanguageProcessor: 清洗文本并分块
-    - 支持多种媒体类型的分块策略
+    - TextCleaner: 统一文本清洗和去重
+    - MediaChunkingStrategy: 根据媒体类型选择专门的分块策略
+    - 支持多种媒体类型（text、markdown、pdf、word、excel、image、video、audio）的统一处理
     """
 
     def __init__(self,
                  extractor: MediaExtractor | None = None,
-                 lang_processor: LanguageProcessor | None = None,
                  quality: QualityAssessor | None = None,
                  use_media_chunking: bool = True) -> None:
         """
@@ -31,19 +30,16 @@ class ProcessingPipeline:
         Args:
             extractor: 媒体提取器，用于从二进制数据中提取文本内容
                       如果为 None，则使用默认的 PlainTextExtractor
-            lang_processor: 语言处理器，用于文本清洗和分块
-                          如果为 None，则使用默认的 ChineseProcessor
             quality: 质量评估器，用于评估文本块质量
                    如果为 None，则跳过质量评估
             use_media_chunking: 是否使用媒体分块策略
                                True: 根据媒体类型使用专门的分块策略
-                               False: 使用传统的文本分块策略
+                               False: 使用传统的文本分块策略（已废弃，统一使用媒体分块策略）
 
         Returns:
             None
         """
         self.extractor = extractor or PlainTextExtractor()
-        self.lang = lang_processor or ChineseProcessor()
         self.quality = quality
         self.metadata_manager = MetadataManager()
         self.use_media_chunking = use_media_chunking
@@ -80,7 +76,8 @@ class ProcessingPipeline:
             return []
         if self.use_media_chunking and self._should_use_media_chunking(extracted):
             return self._process_with_media_chunking(extracted)
-        return self._process_text_chunks(extracted)
+        # 如果use_media_chunking为False，仍然使用媒体分块策略（统一处理）
+        return self._process_with_media_chunking(extracted)
 
     def _extract_sample(self, sample: RawSample) -> Dict[str, Any] | None:
         """
@@ -94,43 +91,27 @@ class ProcessingPipeline:
                                  如果提取失败则返回 None
         """
         media_type = str(sample.meta.get("media_type", "text")).lower()
-        if media_type in ["image", "video", "audio"]:
+        if media_type in ["text", "markdown", "image", "video", "audio", "pdf", "word", "excel"]:
             extractor = MediaExtractorFactory.create_extractor(media_type)
             if extractor and extractor.is_available():
                 content = extractor.extract(sample.bytes, dict(sample.meta))
-                return {"content": content, "meta": dict(sample.meta)}
+                # 对于text和markdown类型，返回格式是{"text": str, "meta": dict}
+                # 对于Office文档（pdf、word、excel）和其他媒体类型，返回格式是媒体特定结构
+                if media_type in ["text", "markdown"]:
+                    return {"text": content.get("text", ""), "meta": content.get("meta", dict(sample.meta))}
+                else:
+                    return {"content": content, "meta": dict(sample.meta)}
             return None
-        return self.extractor.extract(sample)
-
-    def _process_text_chunks(self, extracted: Dict[str, Any]) -> List[ProcessedChunk]:
-        """
-        使用传统文本分块策略处理提取的内容
-
-        Args:
-            extracted: 提取的内容字典，包含 "text" 和 "meta" 键
-
-        Returns:
-            List[ProcessedChunk]: 处理后的文本块列表，每个块包含文本内容和元数据
-        """
-        # 使用统一的文本清洗器进行清洗
-        cleaned = self.text_cleaner.clean(extracted.get("text", ""))
-        if not cleaned:
-            return []
-        parts = self.lang.chunk(cleaned)
-        chunks: List[ProcessedChunk] = []
-        total_chunks = len(parts)
-        base_meta = extracted.get("meta", {})
-        for idx, part in enumerate(parts):
-            candidate_fields = {
-                **base_meta,
-                "chunk_index": idx,
-                "chunk_type": "text",
-                "chunk_size": len(part),
-                "total_chunks": total_chunks
-            }
-            normalized_meta = self.metadata_manager.build_metadata(candidate_fields, text=part)
-            chunks.append(ProcessedChunk(text=part, meta=normalized_meta))
-        return chunks
+        # 兜底：使用默认文本提取器（统一使用新接口）
+        if self.extractor and hasattr(self.extractor, 'extract'):
+            try:
+                # 尝试新接口
+                content = self.extractor.extract(sample.bytes, dict(sample.meta))
+                return {"text": content.get("text", ""), "meta": content.get("meta", dict(sample.meta))}
+            except TypeError:
+                # 兼容旧接口（如果传入的是RawSample）
+                return self.extractor.extract(sample)
+        return None
 
     @staticmethod
     def _should_use_media_chunking(extracted: Dict[str, Any]) -> bool:
@@ -145,7 +126,9 @@ class ProcessingPipeline:
         """
         meta = extracted.get("meta", {})
         media_type = str(meta.get("media_type", "")).lower()
-        return media_type in ["pdf", "image", "video", "audio"]
+        # 所有文本类型（text、markdown）和Office文档（pdf、word、excel）以及其他媒体类型（image、video、audio）
+        # 都统一使用媒体分块策略进行处理
+        return media_type in ["text", "markdown", "pdf", "word", "excel", "image", "video", "audio"]
     
     def _process_with_media_chunking(self, extracted: Dict[str, Any]) -> List[ProcessedChunk]:
         """

@@ -3,7 +3,7 @@
 """
 
 from typing import List, Dict, Any
-from .audio_video_base import AudioVideoChunkingStrategyBase
+from .base import AudioVideoChunkingStrategyBase
 
 
 class VideoChunkingStrategy(AudioVideoChunkingStrategyBase):
@@ -120,4 +120,3 @@ class VideoChunkingStrategy(AudioVideoChunkingStrategyBase):
             })
         
         return chunks
-    

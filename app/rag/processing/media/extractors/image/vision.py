@@ -4,10 +4,12 @@
 
 import logging
 from typing import Dict, Any, List, Tuple
-from .base import MediaExtractor
+from ..base import MediaExtractor
 from app.config import get_config_manager
 from app.infra.models import ModelLoader, ModelType, LoaderConfig
-from ...utils.quality_utils import (
+# 使用相对导入避免路径解析问题
+# 从 image/ 到 processing/ 需要 3 个点：.. -> extractors/, ../.. -> media/, ../../.. -> processing/
+from ....utils.quality_utils import (
     clip_rerank,
 )
 
@@ -340,4 +342,3 @@ class ImageVisionExtractor(MediaExtractor):
             logger.error(f"caption translation failed: {e}")
             raise
         return captions
-

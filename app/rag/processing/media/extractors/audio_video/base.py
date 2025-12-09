@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any
 from abc import ABC
-from .base import MediaExtractor
+from ..base import MediaExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -328,4 +328,3 @@ class AudioVideoExtractorBase(MediaExtractor, ABC):
             return ""
         
         return text
-

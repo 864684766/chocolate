@@ -3,7 +3,7 @@
 """
 
 from typing import List, Dict, Any
-from .audio_video_base import AudioVideoChunkingStrategyBase
+from .base import AudioVideoChunkingStrategyBase
 
 
 class AudioChunkingStrategy(AudioVideoChunkingStrategyBase):
@@ -43,4 +43,3 @@ class AudioChunkingStrategy(AudioVideoChunkingStrategyBase):
         
         # 使用基类的公共方法进行分块，设置正确的 chunk_type
         return self._chunk_by_transcript(transcript, start_index=0, chunk_type="audio_transcript")
-

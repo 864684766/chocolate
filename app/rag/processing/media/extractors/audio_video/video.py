@@ -4,7 +4,7 @@
 
 import logging
 from typing import Dict, Any, List
-from .audio_video_base import AudioVideoExtractorBase
+from .base import AudioVideoExtractorBase
 from .subtitle_helper import (
     extract_embedded_subtitles,
     generate_subtitles_with_whisper
@@ -178,4 +178,3 @@ class VideoContentExtractor(AudioVideoExtractorBase):
             logger.warning(f"Subtitle extraction failed: {e}")
         
         return subtitles
-    

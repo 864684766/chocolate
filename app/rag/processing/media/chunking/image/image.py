@@ -3,7 +3,7 @@
 """
 
 from typing import List, Dict, Any
-from .base import MediaChunkingStrategy
+from ..base import MediaChunkingStrategy
 
 
 class ImageChunkingStrategy(MediaChunkingStrategy):
@@ -60,9 +60,8 @@ class ImageChunkingStrategy(MediaChunkingStrategy):
                     "chunk_index": chunk_index,
                     "chunk_type": "image_region",
                     "region_index": region_idx,
-                    "chunk_size": len(region_text),
-                    "image_meta": image_meta,
-                    "region_bounds": self._get_region_bounds(region)
+                    "chunk_size": len(region_text)
+                    # 注意：image_meta和region_bounds不在metadata_whitelist中，已被移除
                 })
                 
                 chunks.append({
@@ -117,8 +116,8 @@ class ImageChunkingStrategy(MediaChunkingStrategy):
                 "chunk_index": chunk_index,
                 "chunk_type": "image_caption",
                 "chunk_size": len(combined_text),
-                "image_meta": image_meta,
                 "caption_count": len(captions)
+                # 注意：image_meta不在metadata_whitelist中，已被移除
             })
             
             chunks.append({
@@ -137,10 +136,8 @@ class ImageChunkingStrategy(MediaChunkingStrategy):
                     "chunk_index": chunk_index,
                     "chunk_type": "image_caption_part",
                     "chunk_size": len(chunk_text),
-                    "start_pos": start,
-                    "end_pos": end,
-                    "image_meta": image_meta,
                     "caption_count": len(captions)
+                    # 注意：start_pos、end_pos和image_meta不在metadata_whitelist中，已被移除
                 })
                 
                 chunks.append({
@@ -235,10 +232,8 @@ class ImageChunkingStrategy(MediaChunkingStrategy):
                 "text": chunk_text,
                 "meta": {
                     "region_index": region_idx,
-                    "chunk_size": len(chunk_text),
-                    "start_pos": start,
-                    "end_pos": end,
-                    "image_meta": image_meta
+                    "chunk_size": len(chunk_text)
+                    # 注意：start_pos、end_pos和image_meta不在metadata_whitelist中，已被移除
                 }
             })
             
