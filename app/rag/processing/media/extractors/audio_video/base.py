@@ -27,15 +27,19 @@ class AudioVideoExtractorBase(MediaExtractor, ABC):
     """
     
     @staticmethod
-    def _get_temp_dir() -> Path:
+    def _get_temp_dir(media_type: str = "") -> Path:
         """
         获取临时文件目录路径
         
-        用处：从配置文件中读取临时文件目录路径，供视频和音频处理共用。
+        用处：从配置文件中读取临时文件目录路径，根据媒体类型创建对应的子文件夹。
         必须在配置文件中明确指定 temp_dir 路径，如果为空或未配置则抛出异常。
         
+        Args:
+            media_type: 媒体类型（如 "audio", "video", "word"），用于创建子文件夹
+                       如果为空，则返回基础临时目录
+        
         Returns:
-            Path: 临时文件目录路径
+            Path: 临时文件目录路径（如果指定了media_type，则返回子文件夹路径）
             
         Raises:
             ValueError: 如果配置中的 temp_dir 为空或未配置
@@ -58,14 +62,22 @@ class AudioVideoExtractorBase(MediaExtractor, ABC):
             # Path() 创建路径对象，自动处理跨平台路径分隔符（Windows: \，Linux/Mac: /）
             # .expanduser() 将 ~ 展开为用户主目录（如 ~/temp -> /home/user/temp 或 C:\Users\user\temp）
             # .resolve() 解析为绝对路径，并解析所有符号链接（如 ../temp -> /absolute/path/temp）
-            temp_dir = Path(temp_dir_path).expanduser().resolve()
+            base_temp_dir = Path(temp_dir_path).expanduser().resolve()
             
-            # 确保临时目录存在
-            if not temp_dir.exists():
-                temp_dir.mkdir(parents=True, exist_ok=True)
-                logger.debug(f"Created temp directory from config: {temp_dir}")
+            # 确保基础临时目录存在
+            if not base_temp_dir.exists():
+                base_temp_dir.mkdir(parents=True, exist_ok=True)
+                logger.debug(f"Created base temp directory from config: {base_temp_dir}")
             
-            return temp_dir
+            # 如果指定了媒体类型，创建对应的子文件夹
+            if media_type:
+                media_temp_dir = base_temp_dir / media_type
+                if not media_temp_dir.exists():
+                    media_temp_dir.mkdir(parents=True, exist_ok=True)
+                    logger.debug(f"Created media temp directory: {media_temp_dir}")
+                return media_temp_dir
+            
+            return base_temp_dir
             
         except ValueError:
             # 重新抛出 ValueError（配置为空的情况）
@@ -74,7 +86,7 @@ class AudioVideoExtractorBase(MediaExtractor, ABC):
             raise RuntimeError(f"无法读取临时文件目录配置: {e}")
     
     @staticmethod
-    def _create_temp_file(content: bytes, meta: Dict[str, Any], default_format: str = "mp4") -> str:
+    def _create_temp_file(content: bytes, meta: Dict[str, Any], default_format: str = "mp4", media_type: str = "") -> str:
         """
         创建临时媒体文件
         
@@ -85,6 +97,7 @@ class AudioVideoExtractorBase(MediaExtractor, ABC):
             content: 媒体文件的二进制内容
             meta: 媒体元数据，用于确定文件扩展名
             default_format: 默认文件格式（如果 meta 中未指定）
+            media_type: 媒体类型（"audio"或"video"），如果为空则根据default_format推断
         
         Returns:
             str: 临时文件路径
@@ -100,7 +113,11 @@ class AudioVideoExtractorBase(MediaExtractor, ABC):
             default_format
         )
         
-        temp_dir = AudioVideoExtractorBase._get_temp_dir()
+        # 根据媒体类型获取临时文件目录（audio或video）
+        # 如果未指定media_type，则根据default_format推断
+        if not media_type:
+            media_type = "audio" if default_format in ["mp3", "wav", "flac", "m4a"] else "video"
+        temp_dir = AudioVideoExtractorBase._get_temp_dir(media_type)
         
         # 创建临时文件
         # tempfile.NamedTemporaryFile 官方文档：https://docs.python.org/3/library/tempfile.html#tempfile.NamedTemporaryFile

@@ -41,6 +41,7 @@
       ".md",
       ".pdf",
       ".docx",
+      ".doc",
       ".png",
       ".jpg",
       ".jpeg",
@@ -50,7 +51,10 @@
       ".mp4",
       ".mov",
       ".avi",
-      ".mkv"
+      ".mkv",
+      ".csv",
+      ".xls",
+      ".xlsx"
     ]
   },
 

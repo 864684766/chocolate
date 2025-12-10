@@ -33,15 +33,19 @@ SUBTITLE_FORMAT_SSA = "ssa"
 DEFAULT_SUBTITLE_FORMATS = [SUBTITLE_FORMAT_SRT, SUBTITLE_FORMAT_VTT, SUBTITLE_FORMAT_ASS, SUBTITLE_FORMAT_SSA]
 
 
-def _get_temp_dir() -> Path:
+def _get_temp_dir(media_type: str = "video") -> Path:
     """
     获取临时文件目录路径
     
-    用处：从配置文件中读取临时文件目录路径，供视频和音频处理共用。
+    用处：从配置文件中读取临时文件目录路径，根据媒体类型创建对应的子文件夹。
     必须在配置文件中明确指定 temp_dir 路径，如果为空或未配置则抛出异常。
     
+    Args:
+        media_type: 媒体类型（如 "audio", "video", "word"），用于创建子文件夹
+                   默认为 "video"
+    
     Returns:
-        Path: 临时文件目录路径
+        Path: 临时文件目录路径（如果指定了media_type，则返回子文件夹路径）
         
     Raises:
         ValueError: 如果配置中的 temp_dir 为空或未配置
@@ -61,14 +65,22 @@ def _get_temp_dir() -> Path:
             )
         
         # 使用配置的路径，支持 ~ 展开（跨平台）
-        temp_dir = Path(temp_dir_path).expanduser().resolve()
+        base_temp_dir = Path(temp_dir_path).expanduser().resolve()
         
-        # 确保临时目录存在
-        if not temp_dir.exists():
-            temp_dir.mkdir(parents=True, exist_ok=True)
-            logger.debug(f"Created temp directory from config: {temp_dir}")
+        # 确保基础临时目录存在
+        if not base_temp_dir.exists():
+            base_temp_dir.mkdir(parents=True, exist_ok=True)
+            logger.debug(f"Created base temp directory from config: {base_temp_dir}")
         
-        return temp_dir
+        # 如果指定了媒体类型，创建对应的子文件夹
+        if media_type:
+            media_temp_dir = base_temp_dir / media_type
+            if not media_temp_dir.exists():
+                media_temp_dir.mkdir(parents=True, exist_ok=True)
+                logger.debug(f"Created media temp directory: {media_temp_dir}")
+            return media_temp_dir
+        
+        return base_temp_dir
         
     except ValueError:
         # 重新抛出 ValueError（配置为空的情况）
@@ -138,7 +150,7 @@ def extract_embedded_subtitles(video_path: str) -> List[Dict[str, Any]]:
         
         # 从配置中获取临时文件目录，在此目录下创建临时字幕文件
         # tempfile.NamedTemporaryFile 官方文档：https://docs.python.org/3/library/tempfile.html#tempfile.NamedTemporaryFile
-        temp_dir = _get_temp_dir()
+        temp_dir = _get_temp_dir("video")
         temp_subtitle_file = tempfile.NamedTemporaryFile(
             mode='w', 
             suffix='.srt', 

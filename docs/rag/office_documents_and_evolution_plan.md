@@ -204,7 +204,10 @@ def extract_excel_pandas(content: bytes) -> Dict[str, Any]:
 
 - **格式检测**：根据文件扩展名和 Magic Number 选择提取器
 - **大文件处理**：使用流式读取，避免内存溢出
-- **表格序列化**：将表格转换为 Markdown 或结构化文本，便于 RAG 处理
+- **表格序列化**：将表格转换为自然语言格式（"列名是值"），优化语义搜索效果
+  - 自动检测表头，有表头时使用自然语言连接符（"列名是值，列名是值"）
+  - 无表头时使用空格分隔单元格
+  - 实现位置：`app/rag/processing/media/chunking/office/base.py`
 
 ## 二、完成提取器和分块器后是否算完善 RAG？
 
@@ -548,12 +551,20 @@ pip install networkx matplotlib
 
 ### 3.3 完整演进路径
 
-#### 阶段 1：完善基础 RAG（当前阶段）
+#### 阶段 1：完善基础 RAG（✅ 已完成）
 
 - ✅ 实现 PDF/Word/Excel 提取器
+  - PDF：使用 PyMuPDF 提取文本和表格
+  - Word：使用 python-docx，支持.doc 通过 LibreOffice 转换
+  - Excel：使用 openpyxl/pandas，支持.xlsx/.xls/.csv 格式
 - ✅ 实现对应的分块策略
-- ✅ 测试和优化提取质量
-- **时间估算**：1-2 周
+  - PDF：按页面分块，保留 page_number 元数据
+  - Word：段落和表格分块，添加 chunk_type 和索引元数据
+  - Excel：按工作表分块，添加 sheet 元数据
+- ✅ 表格转换策略：使用自然语言连接符（"列名是值"格式），优化语义搜索
+- ✅ 工厂类注册和配置更新
+- ✅ 文档更新
+- ⚠️ 待完成：单元测试、集成测试、性能测试
 
 #### 阶段 2：RAG+Reasoning（2-3 周）
 
@@ -663,16 +674,16 @@ pip install networkx matplotlib
 
 ### 5.1 RAG 完善检查清单
 
-- [ ] PDF 提取器实现（PyMuPDF）
-- [ ] Word 提取器实现（python-docx）
-- [ ] Excel 提取器实现（openpyxl）
-- [ ] 对应分块策略实现
-- [ ] 工厂类注册新类型
-- [ ] 配置文件更新
+- [x] PDF 提取器实现（PyMuPDF）
+- [x] Word 提取器实现（python-docx，支持.doc 通过 LibreOffice 转换）
+- [x] Excel 提取器实现（openpyxl/pandas，支持.xlsx/.xls/.csv）
+- [x] 对应分块策略实现（PDF/Word/Excel）
+- [x] 工厂类注册新类型
+- [x] 配置文件更新
 - [ ] 单元测试编写
 - [ ] 集成测试验证
 - [ ] 性能测试
-- [ ] 文档更新
+- [x] 文档更新
 
 ### 5.2 RAG+Reasoning 准备检查清单
 

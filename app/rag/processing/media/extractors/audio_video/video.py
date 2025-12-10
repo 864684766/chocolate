@@ -111,7 +111,7 @@ class VideoContentExtractor(AudioVideoExtractorBase):
         
         try:
             # 使用基类方法创建临时文件，供字幕和语音转录共用
-            temp_file_path = AudioVideoExtractorBase._create_temp_file(content, meta, default_format="mp4")
+            temp_file_path = AudioVideoExtractorBase._create_temp_file(content, meta, default_format="mp4", media_type="video")
             
             # 同时提取字幕和语音转录，共用同一个临时文件
             subtitles = VideoContentExtractor._extract_subtitles(temp_file_path)

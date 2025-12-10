@@ -22,8 +22,7 @@ class ProcessingPipeline:
 
     def __init__(self,
                  extractor: MediaExtractor | None = None,
-                 quality: QualityAssessor | None = None,
-                 use_media_chunking: bool = True) -> None:
+                 quality: QualityAssessor | None = None) -> None:
         """
         初始化处理流水线
 
@@ -32,9 +31,6 @@ class ProcessingPipeline:
                       如果为 None，则使用默认的 PlainTextExtractor
             quality: 质量评估器，用于评估文本块质量
                    如果为 None，则跳过质量评估
-            use_media_chunking: 是否使用媒体分块策略
-                               True: 根据媒体类型使用专门的分块策略
-                               False: 使用传统的文本分块策略（已废弃，统一使用媒体分块策略）
 
         Returns:
             None
@@ -42,7 +38,6 @@ class ProcessingPipeline:
         self.extractor = extractor or PlainTextExtractor()
         self.quality = quality
         self.metadata_manager = MetadataManager()
-        self.use_media_chunking = use_media_chunking
         self.text_cleaner = TextCleaner()
 
     def run(self, samples: List[RawSample]) -> List[ProcessedChunk]:
@@ -74,9 +69,7 @@ class ProcessingPipeline:
         extracted = self._extract_sample(sample)
         if not extracted:
             return []
-        if self.use_media_chunking and self._should_use_media_chunking(extracted):
-            return self._process_with_media_chunking(extracted)
-        # 如果use_media_chunking为False，仍然使用媒体分块策略（统一处理）
+        # 统一使用媒体分块策略处理所有媒体类型
         return self._process_with_media_chunking(extracted)
 
     def _extract_sample(self, sample: RawSample) -> Dict[str, Any] | None:
@@ -112,23 +105,6 @@ class ProcessingPipeline:
                 # 兼容旧接口（如果传入的是RawSample）
                 return self.extractor.extract(sample)
         return None
-
-    @staticmethod
-    def _should_use_media_chunking(extracted: Dict[str, Any]) -> bool:
-        """
-        判断是否应该使用媒体分块策略
-
-        Args:
-            extracted: 提取的内容字典，包含 "meta" 键
-
-        Returns:
-            bool: True 表示应该使用媒体分块策略，False 表示使用传统文本分块
-        """
-        meta = extracted.get("meta", {})
-        media_type = str(meta.get("media_type", "")).lower()
-        # 所有文本类型（text、markdown）和Office文档（pdf、word、excel）以及其他媒体类型（image、video、audio）
-        # 都统一使用媒体分块策略进行处理
-        return media_type in ["text", "markdown", "pdf", "word", "excel", "image", "video", "audio"]
     
     def _process_with_media_chunking(self, extracted: Dict[str, Any]) -> List[ProcessedChunk]:
         """

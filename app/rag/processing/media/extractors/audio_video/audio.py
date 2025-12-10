@@ -87,7 +87,7 @@ class AudioContentExtractor(AudioVideoExtractorBase):
         try:
             # 使用基类方法创建临时文件
             # 默认格式为 mp3，如果 meta 中有 audio_format 则使用该格式
-            temp_file_path = AudioVideoExtractorBase._create_temp_file(content, meta, default_format="mp3")
+            temp_file_path = AudioVideoExtractorBase._create_temp_file(content, meta, default_format="mp3", media_type="audio")
             
             # 提取语音转录文本（音频没有字幕，只提取转录）
             transcript = AudioVideoExtractorBase._extract_transcript(temp_file_path)

@@ -11,11 +11,11 @@ app/rag/processing/
   quality_checker.py          # 质量评估（SimpleQualityAssessor）
   media_text.py               # 纯文本/Markdown基础解码（utf-8→gb18030→latin-1）
   media_markdown.py           # Markdown 提取（去围栏/标题号）
-  lang_zh.py                  # 中文处理器（clean + chunk）
-  media_extractors.py         # 媒体内容提取器（图像、视频、音频）
-  media_chunking.py           # 媒体分块策略
+  media/                      # 媒体处理模块
+    extractors/               # 媒体内容提取器（文本、图像、视频、音频、PDF、Word、Excel）
+    chunking/                 # 媒体分块策略（文本、PDF、Word、Excel、图像、视频、音频）
+  utils/                      # 工具模块（文本清洗、分块参数决策等）
   config_usage_example.py     # 配置使用示例
-  # 预留：media/pdf_extractor.py, media/image_ocr.py, media/audio_asr.py, media/video_extractor.py 等
 ```
 
 说明：
@@ -30,8 +30,8 @@ app/rag/processing/
 
 ## 统一接口
 
-- `LanguageProcessor`：clean(text)->str, chunk(text)->List[str], extract_meta()->dict
-- `MediaExtractor`：extract(RawSample)->{"text": str, "meta": {...}}
+- `MediaExtractor`：extract(bytes, meta)->{"text": str, "meta": {...}} 或媒体特定结构
+- `MediaChunkingStrategy`：chunk(content, meta)->List[Dict[str, Any]]
 - `QualityAssessor`：score(text, meta)->Dict[str, Any]
 
 ## 元数据管理
@@ -341,9 +341,9 @@ strategy = ChunkingStrategyFactory.create_strategy(
 - 标点与空白归一化、繁简转换（opencc）
 - 章节/小节/标题保留为元数据，利于重排与引用
 
-### 中文处理器配置
+### 文本分块策略配置
 
-中文处理器 (`lang_zh.py`) 现在支持通过配置文件进行参数调整：
+文本分块策略 (`TextChunkingStrategy`) 支持通过配置文件进行参数调整：
 
 #### 配置结构
 
@@ -354,22 +354,19 @@ strategy = ChunkingStrategyFactory.create_strategy(
       "chunking": {
         "default_chunk_size": 800,
         "default_overlap": 150,
-        "use_langchain": true,
         "separators": ["\n\n", "\n", "。", "！", "？", "；", "，", " ", ""]
-      },
-      "text_cleaning": {
-        "normalize_whitespace_pattern": "[ \\t]+",
-        "normalize_whitespace_replacement": " ",
-        "normalize_newlines_pattern": "\\n\\s*\\n\\s*\\n+",
-        "normalize_newlines_replacement": "\n\n"
       },
       "sentence_splitting": {
         "sentence_endings_pattern": "[。！？；]"
-      },
-      "metadata": {
-        "processor_type": "ChineseProcessor",
-        "language": "zh"
       }
+    }
+  },
+  "processing": {
+    "text_cleaning": {
+      "normalize_whitespace_pattern": "[ \\t]+",
+      "normalize_whitespace_replacement": " ",
+      "normalize_newlines_pattern": "\\n\\s*\\n\\s*\\n+",
+      "normalize_newlines_replacement": "\n\n"
     }
   }
 }
@@ -377,53 +374,135 @@ strategy = ChunkingStrategyFactory.create_strategy(
 
 #### 配置参数说明
 
-**chunking 分块配置**：
+**chunking 分块配置**（`language_processing.chinese.chunking`）：
 
 - `default_chunk_size`: 默认分块大小（字符数）
 - `default_overlap`: 默认重叠大小（字符数）
-- `use_langchain`: 是否使用 LangChain 智能分块器
 - `separators`: 分块分隔符优先级列表，按优先级从高到低排列
-  - 该配置被 `ChineseProcessor` 和 `TextChunkingStrategy` 共同使用
-  - 配置位置：`language_processing.chinese.chunking.separators`
+  - 该配置被 `TextChunkingStrategy` 使用（LangChain 智能分块）
   - 如果未配置，将使用默认分隔符列表（段落、行、中文标点、空格、字符级别）
 
-**text_cleaning 文本清洗配置**：
+**sentence_splitting 句子分割配置**（`language_processing.chinese.sentence_splitting`）：
+
+- `sentence_endings_pattern`: 中文句子结束标点符号正则表达式
+  - 用于回退方案（当 LangChain 不可用时）的语义边界分块
+
+**text_cleaning 文本清洗配置**（`processing.text_cleaning`）：
 
 - `normalize_whitespace_pattern`: 空白字符归一化正则表达式
 - `normalize_whitespace_replacement`: 空白字符替换字符串
 - `normalize_newlines_pattern`: 换行符归一化正则表达式
 - `normalize_newlines_replacement`: 换行符替换字符串
 
-**sentence_splitting 句子分割配置**：
-
-- `sentence_endings_pattern`: 中文句子结束标点符号正则表达式
-
-**metadata 元数据配置**：
-
-- `processor_type`: 处理器类型标识
-- `language`: 语言标识
-
 #### 使用示例
 
 ```python
-from app.rag.processing.lang_zh import ChineseProcessor
+from app.rag.processing.media.chunking.text import TextChunkingStrategy
 
 # 使用默认配置
-processor = ChineseProcessor()
+strategy = TextChunkingStrategy()
 
 # 覆盖特定参数
-processor = ChineseProcessor(chunk_size=1000, overlap=200)
+strategy = TextChunkingStrategy(chunk_size=1000, overlap=200)
 
-# 禁用 LangChain
-processor = ChineseProcessor(use_langchain=False)
+# 分块处理
+meta = {"media_type": "text", "source": "test"}
+chunks = strategy.chunk("这是测试文本内容", meta)
 ```
 
-#### 配置化的优势
+#### 文本分块策略说明
 
-1. **灵活性**：无需修改代码即可调整处理参数
-2. **可维护性**：所有配置集中管理，便于维护
-3. **可扩展性**：支持不同环境使用不同配置
-4. **向后兼容**：保持原有 API 不变，参数可选
+`TextChunkingStrategy` 提供两种分块方式：
+
+1. **LangChain 智能分块**（优先）：
+
+   - 使用 `langchain-text-splitters` 的 `RecursiveCharacterTextSplitter`
+   - 支持中文友好的分隔符优先级
+   - 自动处理重叠
+
+2. **语义边界分块**（回退方案）：
+   - 当 LangChain 不可用时自动回退
+   - 按段落和句子边界分割
+   - 保留重叠机制，确保上下文连续性
+
+### Office 文档分块策略配置
+
+Office 文档（PDF、Word、Excel）的分块策略基于 `OfficeDocumentChunkingStrategyBase` 基类，提供统一的表格转换和文本分块功能。
+
+#### 表格转换策略（自然语言格式）
+
+系统采用**自然语言连接符**方式将表格转换为文本，以优化语义搜索效果：
+
+**转换规则**：
+
+1. **表头检测**：
+
+   - 自动检测第一行是否为表头（启发式：第一行平均长度 < 20 且后续有数据行）
+   - 如果检测到表头，则分离表头和数据行
+
+2. **有表头的表格转换**：
+
+   - 格式：`"列名是值，列名是值"`
+   - 示例：
+     ```
+     原文是信息的特征，速记词是扑克舞动，解释是想象一张扑克
+     ```
+   - 优势：更符合自然语言，对语义搜索和向量检索更友好
+
+3. **无表头的表格转换**：
+   - 格式：使用空格分隔单元格
+   - 过滤空单元格，保留有效内容
+
+**实现位置**：
+
+- 基类：`app/rag/processing/media/chunking/office/base.py`
+- 方法：`_convert_table_to_text()`、`_detect_table_header()`、`_convert_table_with_headers()`、`_convert_table_simple()`
+
+**使用示例**：
+
+```python
+from app.rag.processing.media.chunking.office.base import OfficeDocumentChunkingStrategyBase
+
+# 表格数据
+table = [
+    ["原文", "速记词", "解释"],
+    ["信息的特征", "扑克舞动", "想象一张扑克"],
+    ["另一个例子", "记忆宫殿", "构建空间记忆"]
+]
+
+# 转换为自然语言文本
+text = OfficeDocumentChunkingStrategyBase._convert_table_to_text(table)
+# 输出：
+# 原文是信息的特征，速记词是扑克舞动，解释是想象一张扑克
+# 原文是另一个例子，速记词是记忆宫殿，解释是构建空间记忆
+```
+
+**优势说明**：
+
+- ✅ **语义友好**：使用自然语言连接符，查询"原文是什么"时能更好匹配
+- ✅ **检索优化**：对向量检索和关键词检索都有帮助
+- ✅ **自动检测**：无需手动配置表头，系统自动识别
+- ✅ **灵活处理**：同时支持有表头和无表头的表格
+
+#### 分块策略说明
+
+**PDF 分块策略** (`PDFChunkingStrategy`)：
+
+- 按页面分块，保留 `page_number` 元数据
+- 表格单独分块，使用自然语言格式转换
+- 支持连续的分块索引
+
+**Word 分块策略** (`WordChunkingStrategy`)：
+
+- 段落分块：添加 `word_paragraph` 类型和 `paragraph_index` 元数据
+- 表格分块：添加 `word_table` 类型和 `table_index` 元数据
+- 长段落自动分割
+
+**Excel 分块策略** (`ExcelChunkingStrategy`)：
+
+- 按工作表分块，每个工作表单独处理
+- 添加 `excel_sheet` 类型和 `sheet_index`/`sheet_name` 元数据
+- 支持 `.xlsx`、`.xls`、`.csv` 格式
 
 ## 媒体处理配置
 

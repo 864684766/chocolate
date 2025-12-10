@@ -66,7 +66,8 @@ class OfficeDocumentExtractorBase(MediaExtractor, ABC):
         # 子类需要实现
         raise NotImplementedError("子类必须实现 _get_document_type 方法")
     
-    def _validate_content(self, content: Dict[str, Any]) -> bool:
+    @staticmethod
+    def _validate_content(content: Dict[str, Any]) -> bool:
         """
         验证提取的内容
         

@@ -75,14 +75,17 @@ def detect_media_type(filename: str, content_type: Optional[str]) -> str:
         # Word文档的常见content_type
         if ct in ["application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
             return "word"
-        # Excel文档的常见content_type
-        if ct in ["application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]:
+        # Excel文档的常见content_type（包括CSV）
+        if ct in ["application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/csv"]:
             return "excel"
         if ct.startswith("text/"):
-            # 检查文件扩展名，如果是.md则返回markdown
+            # 检查文件扩展名
             _, ext = os.path.splitext(filename.lower())
             if ext == ".md":
                 return "markdown"
+            # CSV文件应该被识别为excel类型
+            if ext == ".csv":
+                return "excel"
             return "text"
 
     _, ext = os.path.splitext(filename.lower())
@@ -100,7 +103,7 @@ def detect_media_type(filename: str, content_type: Optional[str]) -> str:
             return "pdf"
         elif ext in [".doc", ".docx"]:
             return "word"
-        elif ext in [".xls", ".xlsx"]:
+        elif ext in [".xls", ".xlsx", ".csv"]:
             return "excel"
         elif ext == ".md":
             return "markdown"

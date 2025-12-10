@@ -42,7 +42,11 @@ app/data_ingestion/
       ".txt",
       ".md",
       ".pdf",
+      ".doc",
       ".docx",
+      ".xls",
+      ".xlsx",
+      ".csv",
       ".png",
       ".jpg",
       ".jpeg",
@@ -59,6 +63,18 @@ app/data_ingestion/
 ```
 
 validators 将从该配置读取后缀集合并进行校验，变更后无需改代码。
+
+**文件格式说明**：
+
+- `.doc`：旧版 Word 格式，系统会在 processing 层通过 LibreOffice 自动转换为 `.docx` 后处理
+- `.csv`：CSV 文件作为 Excel 类型处理，使用 Excel 提取器和分块策略
+- 所有 Office 文档（PDF、Word、Excel）的内容提取和分块都在 processing 层完成
+
+**文件格式说明**：
+
+- `.doc`：旧版 Word 格式，系统会在 processing 层通过 LibreOffice 自动转换为 `.docx` 后处理
+- `.csv`：CSV 文件作为 Excel 类型处理，使用 Excel 提取器和分块策略
+- 所有 Office 文档（PDF、Word、Excel）的内容提取和分块都在 processing 层完成
 
 ## 推荐依赖
 
