@@ -70,7 +70,7 @@ class ProcessingPipeline:
         if not extracted:
             return []
         # 统一使用媒体分块策略处理所有媒体类型
-        return self._process_with_media_chunking(extracted)
+            return self._process_with_media_chunking(extracted)
 
     def _extract_sample(self, sample: RawSample) -> Dict[str, Any] | None:
         """
