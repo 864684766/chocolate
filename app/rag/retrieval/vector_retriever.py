@@ -35,7 +35,7 @@ class VectorRetriever:
     def __init__(self, collection_name: str | None = None):
         self.logger = get_logger(__name__)
         cfg = VectorizationConfig.from_config_manager()
-        # 从 vectorization.database.collection_name 读取集合名
+        # 从 databases.chroma.collection_name 读取集合名
         self.collection_name = collection_name or getattr(cfg, "collection_name")
         self.db = ChromaDBHelper()
         self.embedder = Embedder(cfg)

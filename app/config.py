@@ -115,9 +115,19 @@ class ConfigManager:
         return provider_config.get("models", {}).get(model, {})
 
     def get_vector_database_config(self) -> Dict[str, Any]:
-        """获取向量数据库的配置（来自 vectorization.database）"""
-        vec = self._config_data.get("vectorization", {})
-        return vec.get("database", {})
+        """获取向量数据库的配置（仅 databases.chroma）。"""
+        databases = self._config_data.get("databases", {})
+        return databases.get("chroma", {})
+
+    def get_meilisearch_database_config(self) -> Dict[str, Any]:
+        """获取 Meilisearch 连接配置（仅 databases.meilisearch）。"""
+        databases = self._config_data.get("databases", {})
+        return databases.get("meilisearch", {})
+
+    def get_neo4j_config(self) -> Dict[str, Any]:
+        """获取 Neo4j 连接配置（databases.neo4j）。"""
+        databases = self._config_data.get("databases", {})
+        return databases.get("neo4j", {})
 
     def get_media_processing_config(self) -> Dict[str, Any]:
         """获取媒体处理配置"""

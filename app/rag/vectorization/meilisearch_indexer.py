@@ -18,14 +18,7 @@ from hashlib import sha1
 import re
 from app.config import get_config_manager
 from app.infra.logging import get_logger
-
-# 尝试导入 Meilisearch 异常类型（如果可用）
-try:
-    from meilisearch.errors import MeilisearchApiError
-    MEILISEARCH_ERROR = MeilisearchApiError
-except ImportError:
-    # 如果导入失败，使用通用异常
-    MEILISEARCH_ERROR = Exception
+from app.infra.database.meilisearch.db_helper import MeilisearchDBHelper
 
 
 class MeilisearchIndexer:
@@ -47,9 +40,9 @@ class MeilisearchIndexer:
         读取配置并初始化客户端。
         """
         self.logger = get_logger(__name__)
-        self._client = None
-        self._index_name = None
-        self._host = ""
+        self._db = MeilisearchDBHelper()
+        self._config_manager = get_config_manager()
+        self._index_name = self._db.default_index
         self._whitelist: Set[str] = set()
         self._types_map: Dict[str, str] = {}
         self._load_config()
@@ -60,21 +53,14 @@ class MeilisearchIndexer:
         Returns:
             None
         """
-        cfg = get_config_manager()
-        
-        # 读取 Meilisearch 配置
-        meili_cfg = (cfg.get_config("retrieval") or {}).get("meilisearch", {}) or {}
-        self._host = str(meili_cfg.get("host", "")).strip()
-        self._api_key = str(meili_cfg.get("api_key", "")) or None
-        self._index_name = str(meili_cfg.get("index", "documents"))
+        meili_cfg = self._config_manager.get_meilisearch_database_config() or {}
+        self._index_name = str(meili_cfg.get("index", self._db.default_index))
         self._sync_on_index = bool(meili_cfg.get("sync_on_index", True))
-
-        # 如果 host 为空，则不启用 Meilisearch
-        if not self._host:
+        # 如果未配置 Meilisearch，提前返回
+        if not self._db.has_config():
             return
-
         # 读取元数据白名单
-        meta_cfg = cfg.get_config("metadata") or {}
+        meta_cfg = self._config_manager.get_config("metadata") or {}
         wl_raw = meta_cfg.get("metadata_whitelist", [])
         if wl_raw and isinstance(wl_raw[0], dict):
             self._whitelist = {str(x.get("field")) for x in wl_raw if x.get("field")}
@@ -90,7 +76,7 @@ class MeilisearchIndexer:
         Returns:
             bool: 如果启用返回 True，否则返回 False
         """
-        return bool(self._host)
+        return self._db.has_config()
 
     def _get_client(self):
         """获取或创建 Meilisearch 客户端。
@@ -102,27 +88,7 @@ class MeilisearchIndexer:
             ImportError: meilisearch 模块未安装
             RuntimeError: 客户端初始化失败
         """
-        if self._client is not None:
-            return self._client
-
-        if not self._host:
-            return None
-
-        try:
-            import meilisearch
-        except ImportError:
-            raise ImportError(
-                "meilisearch 模块未安装，请运行: poetry add meilisearch"
-            )
-
-        try:
-            self._client = meilisearch.Client(
-                url=self._host,
-                api_key=self._api_key,
-            )
-            return self._client
-        except Exception as e:
-            raise RuntimeError(f"初始化 Meilisearch 客户端失败: {e}") from e
+        return self._db.get_client() if self._db.has_config() else None
 
     def ensure_index(self) -> None:
         """确保索引存在并正确配置。
@@ -135,76 +101,23 @@ class MeilisearchIndexer:
         Raises:
             RuntimeError: 索引创建或配置失败
         """
-        if not self._host:
+        if not self._db.has_config():
             return
-
         try:
-            client = self._get_client()
-            if not client:
-                return
-
-            # 检查索引是否存在
-            index_exists = False
-            try:
-                # 尝试获取索引统计信息，如果不存在会抛出异常
-                index = client.index(self._index_name)
-                index.get_stats()
-                index_exists = True
-                self.logger.info(f"Meilisearch 索引 '{self._index_name}' 已存在")
-            except MEILISEARCH_ERROR as check_error:
-                # 捕获 Meilisearch API 错误（索引不存在通常是 404）
-                error_str = str(check_error).lower()
-                if "not found" in error_str or "404" in error_str:
-                    index_exists = False
-                else:
-                    # 其他 API 错误，记录日志但继续尝试创建
-                    self.logger.warning(f"检查索引时出错: {check_error}，将尝试创建新索引")
-                    index_exists = False
-            except (ConnectionError, RuntimeError) as check_error:
-                # 捕获连接错误或运行时错误
-                self.logger.warning(f"检查索引时发生连接或运行时错误: {check_error}，将尝试创建新索引")
-                index_exists = False
-            
-            if not index_exists:
-                # 索引不存在，创建新索引
-                try:
-                    client.create_index(self._index_name, {"primaryKey": "id"})
-                    self.logger.info(f"已创建 Meilisearch 索引 '{self._index_name}'")
-                except MEILISEARCH_ERROR as create_error:
-                    # 创建失败，可能是索引已存在（并发情况）
-                    error_str = str(create_error).lower()
-                    if "already exists" in error_str or "409" in error_str:
-                        self.logger.info(f"Meilisearch 索引 '{self._index_name}' 已存在（并发创建）")
-                    else:
-                        raise RuntimeError(f"创建 Meilisearch 索引失败: {create_error}") from create_error
-                except (ConnectionError, RuntimeError) as create_error:
-                    # 连接错误或运行时错误
-                    raise RuntimeError(f"创建 Meilisearch 索引失败: {create_error}") from create_error
-
-            # 配置搜索字段和过滤字段
-            index = client.index(self._index_name)
-            
-            # 设置搜索字段：text 为主要搜索字段
-            searchable_attributes = ["text"]
-            index.update_searchable_attributes(searchable_attributes)
-            
-            # 设置过滤字段：所有元数据字段都可以用于过滤
-            filterable_attributes = list(self._whitelist)
-            if filterable_attributes:
-                index.update_filterable_attributes(filterable_attributes)
-            
-            self.logger.info(
-                f"Meilisearch 索引配置完成: 搜索字段={searchable_attributes}, "
-                f"过滤字段={filterable_attributes[:5]}..." if len(filterable_attributes) > 5 else f"过滤字段={filterable_attributes}"
+            searchable = ["text"]
+            filterable = list(self._whitelist)
+            self._db.ensure_index(
+                index_name=self._index_name,
+                searchable=searchable,
+                filterable=filterable,
+                primary_key="id",
             )
-
-        except (RuntimeError, ValueError, ConnectionError) as e:
-            # 捕获具体的异常类型，避免过于宽泛的 Exception
-            self.logger.error(f"配置 Meilisearch 索引失败: {e}", exc_info=True)
-            raise RuntimeError(f"配置 Meilisearch 索引失败: {e}") from e
+            self.logger.info(
+                f"Meilisearch 索引配置完成: 搜索字段={searchable}, 过滤字段={filterable[:5]}..." 
+                if len(filterable) > 5 else f"Meilisearch 索引配置完成: 搜索字段={searchable}, 过滤字段={filterable}"
+            )
         except Exception as e:
-            # 捕获其他未预期的异常
-            self.logger.error(f"配置 Meilisearch 索引时发生未预期错误: {type(e).__name__}: {e}", exc_info=True)
+            self.logger.error(f"配置 Meilisearch 索引失败: {e}", exc_info=True)
             raise RuntimeError(f"配置 Meilisearch 索引失败: {e}") from e
 
     def index_documents(
@@ -227,7 +140,7 @@ class MeilisearchIndexer:
             - 如果 Meilisearch host 未配置或同步开关关闭，直接返回 0
             - 错误不会抛出异常，只记录日志
         """
-        if not self._host or not self._sync_on_index:
+        if not self._db.has_config() or not self._sync_on_index:
             return 0
 
         if not ids or not texts:

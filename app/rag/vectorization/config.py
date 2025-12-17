@@ -8,7 +8,7 @@ class VectorizationConfig:
     """向量化配置
 
     - 模型与批处理参数
-    - 数据库连接（从 vectorization.database 读取）
+    - 数据库连接（读取 databases.chroma）
     """
 
     # 模型/批处理
@@ -22,18 +22,18 @@ class VectorizationConfig:
 
     @classmethod
     def from_config_manager(cls) -> "VectorizationConfig":
-        cfg = get_config_manager().get_config().get("vectorization", {})
-        
-        # 从 database.collection_name 读取集合名
-        database = cfg.get("database", {})
+        cfg_manager = get_config_manager()
+        vec_cfg = cfg_manager.get_config().get("vectorization", {})
+        # 从 databases.chroma 读取集合名
+        database = cfg_manager.get_vector_database_config()
         collection_name = database.get("collection_name")
         if not collection_name:
             raise ValueError("vectorization.database.collection_name 未配置")
         
         instance = cls(
-            model=cfg.get("model", cls.model),
-            device=cfg.get("device", cls.device),
-            batch_size=cfg.get("batch_size", cls.batch_size),
+            model=vec_cfg.get("model", cls.model),
+            device=vec_cfg.get("device", cls.device),
+            batch_size=vec_cfg.get("batch_size", cls.batch_size),
             database=database,
             collection_name=collection_name,
         )

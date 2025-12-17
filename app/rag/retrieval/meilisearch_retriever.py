@@ -18,8 +18,8 @@ from typing import List, Dict, Any
 import time
 
 from .schemas import RetrievalQuery, RetrievalResult, RetrievedItem
-from app.config import get_config_manager
 from app.infra.logging import get_logger
+from app.infra.database.meilisearch.db_helper import MeilisearchDBHelper
 from app.rag.retrieval.utils.query_cleaner import clean_query_basic
 from app.rag.retrieval.utils.where_to_meilisearch_filter import convert_where_to_filter
 from app.rag.retrieval.utils.meilisearch_filter_builder import MeilisearchFilterBuilder
@@ -48,24 +48,10 @@ class MeilisearchRetriever:
                               默认 True，直接从元数据生成，避免转换开销
         """
         self.logger = get_logger(__name__)
-        self._client = None
-        self._index_name = index_name
+        self._db = MeilisearchDBHelper()
+        self._index_name = index_name or self._db.default_index
         self._use_direct_filter = use_direct_filter
         self._filter_builder = MeilisearchFilterBuilder() if use_direct_filter else None
-        self._load_config()
-
-    def _load_config(self) -> None:
-        """从配置读取 Meilisearch 连接信息。
-
-        Returns:
-            None
-        """
-        cfg = get_config_manager()
-        meili_cfg = (cfg.get_config("retrieval") or {}).get("meilisearch", {}) or {}
-        
-        self._host = str(meili_cfg.get("host", "")).strip()
-        self._api_key = str(meili_cfg.get("api_key", "")) or None
-        self._index_name = self._index_name or str(meili_cfg.get("index", "documents"))
 
     def _get_client(self):
         """获取或创建 Meilisearch 客户端。
@@ -77,24 +63,7 @@ class MeilisearchRetriever:
             ImportError: meilisearch 模块未安装
             RuntimeError: 客户端初始化失败
         """
-        if self._client is not None:
-            return self._client
-
-        try:
-            import meilisearch
-        except ImportError:
-            raise ImportError(
-                "meilisearch 模块未安装，请运行: poetry add meilisearch"
-            )
-
-        try:
-            self._client = meilisearch.Client(
-                url=self._host,
-                api_key=self._api_key,
-            )
-            return self._client
-        except Exception as e:
-            raise RuntimeError(f"初始化 Meilisearch 客户端失败: {e}") from e
+        return self._db.get_client()
 
     def search(self, q: RetrievalQuery) -> RetrievalResult:
         """执行 Meilisearch BM25 关键词检索。
@@ -108,7 +77,7 @@ class MeilisearchRetriever:
         Raises:
             RuntimeError: Meilisearch 未配置或检索失败
         """
-        if not self._host:
+        if not self._db.has_config():
             self.logger.warning("Meilisearch host 未配置，返回空结果")
             return RetrievalResult(
                 items=[],
