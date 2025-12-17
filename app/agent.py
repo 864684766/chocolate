@@ -57,19 +57,12 @@ def build_agent(ai_type: Optional[str] = None, provider: Optional[str] = None) -
         else:
             system_prompt = react_template
     
-    # 从配置文件获取Agent配置
-    agent_config = config_manager.get_agent_config()
-    
     # 创建 Agent（LangChain V1 使用 create_agent，不再需要 AgentExecutor）
     # create_agent 返回的对象可以直接使用，支持 invoke 方法
     agent = create_agent(
         model=llm,
         tools=tools,
-        system_prompt=system_prompt,
-        # LangChain V1 的 create_agent 支持以下参数（如果可用）
-        # verbose=agent_config.get("verbose", False),  # 详细输出
-        # max_iterations=agent_config.get("max_iterations", 5),  # 最大迭代次数
-        # handle_parsing_errors=agent_config.get("handle_parsing_errors", True),  # 处理解析错误
+        system_prompt=system_prompt
     )
     
     return agent

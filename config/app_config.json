@@ -26,15 +26,6 @@
     "description": "模型实例缓存配置"
   },
 
-  "agent": {
-    "verbose": false,
-    "max_iterations": 5,
-    "max_execution_time": 300,
-    "handle_parsing_errors": true,
-    "return_intermediate_steps": false,
-    "description": "Agent执行器配置"
-  },
-
   "ingestion": {
     "supported_extensions": [
       ".txt",

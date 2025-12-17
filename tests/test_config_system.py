@@ -27,35 +27,28 @@ def test_config_system():
         print(f'   port: {server_config.get("port")}')
         print(f'   reload: {server_config.get("reload")}')
         
-        # 4. 测试Agent配置
-        print('\n4. 测试Agent配置:')
-        agent_config = config_manager.get_agent_config()
-        print(f'   verbose: {agent_config.get("verbose")}')
-        print(f'   max_iterations: {agent_config.get("max_iterations")}')
-        print(f'   max_execution_time: {agent_config.get("max_execution_time")}')
-        
-        # 5. 测试缓存配置
-        print('\n5. 测试缓存配置:')
+        # 4. 测试缓存配置
+        print('\n4. 测试缓存配置:')
         cache_config = config_manager.get_cache_config()
         print(f'   max_cache_size: {cache_config.get("max_cache_size")}')
         
-        # 6. 测试LLM配置
-        print('\n6. 测试LLM配置:')
+        # 5. 测试LLM配置
+        print('\n5. 测试LLM配置:')
         llm_config = config_manager.get_config("llm")
         print(f'   default_provider: {llm_config.get("default_provider")}')
         print(f'   default_model: {llm_config.get("default_model")}')
         print(f'   default_temperature: {llm_config.get("default_temperature")}')
         
-        # 7. 测试提供商配置
-        print('\n7. 测试提供商配置:')
+        # 6. 测试提供商配置
+        print('\n6. 测试提供商配置:')
         providers_config = config_manager.get_providers_config()
         print(f'   可用提供商: {list(providers_config.keys())}')
         for provider, config in providers_config.items():
             models = list(config.get("models", {}).keys())
             print(f'   {provider}: {models}')
         
-        # 8. 测试AI类型别名
-        print('\n8. 测试AI类型别名:')
+        # 7. 测试AI类型别名
+        print('\n7. 测试AI类型别名:')
         available_aliases = config_manager.get_available_ai_types()
         print(f'   可用别名: {available_aliases}')
         for alias in available_aliases:
@@ -64,28 +57,28 @@ def test_config_system():
                 provider, model = found
                 print(f'   {alias}: {provider} - {model}')
         
-        # 9. 测试提示词配置
-        print('\n9. 测试提示词配置:')
+        # 8. 测试提示词配置
+        print('\n8. 测试提示词配置:')
         prompts_config = config_manager.get_prompts_config()
         react_template = prompts_config.get("react_template", "")
         print(f'   ReAct模板长度: {len(react_template)} 字符')
         print(f'   包含工具说明: {"{tools}" in react_template}')
         
-        # 10. 测试工具配置
-        print('\n10. 测试工具配置:')
+        # 9. 测试工具配置
+        print('\n9. 测试工具配置:')
         tools_config = config_manager.get_tools_config()
         available_tools = tools_config.get("available_tools", [])
         print(f'   可用工具: {available_tools}')
         
-        # 11. 测试便捷函数
-        print('\n11. 测试便捷函数:')
+        # 10. 测试便捷函数
+        print('\n10. 测试便捷函数:')
         settings = get_settings()
         print(f'   默认provider: {settings.provider}')
         print(f'   默认model: {settings.model}')
         print(f'   默认temperature: {settings.temperature}')
         
-        # 12. 测试配置重载
-        print('\n12. 测试配置重载:')
+        # 11. 测试配置重载
+        print('\n11. 测试配置重载:')
         config_manager.reload_config()
         print('   ✓ 配置重载成功')
         

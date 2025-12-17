@@ -85,10 +85,6 @@ class ConfigManager:
             api_key=api_key,
         )
 
-    def get_agent_config(self) -> Dict[str, Any]:
-        """获取Agent配置"""
-        return self._config_data.get("agent", {})
-
     def get_cache_config(self) -> Dict[str, Any]:
         """获取缓存配置"""
         return self._config_data.get("cache", {})
