@@ -6,6 +6,7 @@ from .embedder import Embedder
 from .metadata_utils import build_metadata_from_meta
 from .utils_writer import normalize_and_build_id, dedup_in_batch, slice_new_records, flatten_metadatas
 from .meilisearch_indexer import MeilisearchIndexer
+from .neo4j_indexer import Neo4jIndexer
 from app.infra.logging import get_logger
 
 
@@ -46,6 +47,15 @@ class VectorIndexer:
         except Exception as e:
             self.logger.warning(f"Meilisearch 索引器初始化失败，将跳过同步: {e}")
             self._meili_indexer = None
+        # 初始化 Neo4j 索引器（如果启用）
+        self._neo4j_indexer: Optional[Neo4jIndexer] = None
+        try:
+            neo4j_indexer = Neo4jIndexer()
+            if neo4j_indexer.is_enabled():
+                self._neo4j_indexer = neo4j_indexer
+        except Exception as e:
+            self.logger.warning(f"Neo4j 索引器初始化失败，将跳过图写入: {e}")
+            self._neo4j_indexer = None
 
     def index_chunks(self, chunks: List[ProcessedChunk]) -> int:
         """写入（或更新）一批处理后的文本块。
@@ -79,11 +89,16 @@ class VectorIndexer:
             prep_result["ids_new"], prep_result["texts_new"], prep_result["metadatas_new"],
             prep_result["ids_update"], prep_result["texts_update"], prep_result["metas_update"]
         )
+        # 同步到 Neo4j
+        neo4j_synced = self._sync_to_neo4j(
+            prep_result["ids_new"], prep_result["metadatas_new"],
+            prep_result["ids_update"], prep_result["metas_update"]
+        )
 
         # 记录统计日志
         self._log_index_stats(
             prep_result["raw_n"], prep_result["after_batch_n"], prep_result["existed_n"],
-            written_n, updated_n, meili_synced
+            written_n, updated_n, meili_synced, neo4j_synced
         )
 
         return written_n + updated_n
@@ -229,6 +244,37 @@ class VectorIndexer:
 
         return meili_synced
 
+    def _sync_to_neo4j(
+        self,
+        ids_new: List[str],
+        metadatas_new: List[dict],
+        ids_update: List[str],
+        metas_update: List[dict],
+    ) -> int:
+        """
+        同步数据到 Neo4j 图数据库（错误隔离）。
+
+        Args:
+            ids_new: 新增分块的 ID 列表。
+            metadatas_new: 新增分块的元数据列表。
+            ids_update: 需要更新的分块 ID 列表。
+            metas_update: 需要更新的分块元数据列表。
+
+        Returns:
+            int: 实际写入或更新到图中的条数。
+        """
+        if not self._neo4j_indexer:
+            return 0
+        synced = 0
+        try:
+            if ids_new:
+                synced += self._neo4j_indexer.index_chunks(ids_new, metadatas_new)
+            if ids_update:
+                synced += self._neo4j_indexer.index_chunks(ids_update, metas_update)
+        except Exception as e:
+            self.logger.warning(f"Neo4j 同步失败: {e}", exc_info=True)
+        return synced
+
     def _log_index_stats(
         self,
         raw_n: int,
@@ -237,14 +283,28 @@ class VectorIndexer:
         written_n: int,
         updated_n: int,
         meili_synced: int,
+        neo4j_synced: int,
     ) -> None:
-        """记录索引统计日志。"""
+        """
+        记录索引统计日志。
+
+        Args:
+            raw_n: 原始块数量。
+            after_batch_n: 批内去重后的数量。
+            existed_n: 库内已存在的数量。
+            written_n: 新写入数量。
+            updated_n: 更新数量。
+            meili_synced: Meilisearch 同步数量。
+            neo4j_synced: Neo4j 同步数量。
+        """
         log_msg = (
             f"vector index: raw={raw_n}, batch_dedup={after_batch_n}, "
             f"existed={existed_n}, written={written_n}, updated={updated_n}"
         )
         if meili_synced > 0:
             log_msg += f", meilisearch_synced={meili_synced}"
+        if neo4j_synced > 0:
+            log_msg += f", neo4j_synced={neo4j_synced}"
         self.logger.info(log_msg)
 
 

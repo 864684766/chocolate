@@ -22,6 +22,7 @@ app/rag/vectorization/
 - `VectorIndexer(cfg).index_chunks(chunks)` 执行以下操作：
   1. 生成向量并写入 ChromaDB 集合 `cfg.collection_name`（其值来自 `vectorization.database.collection_name`）
   2. 同步写入 Meilisearch 索引（如果 `retrieval.meilisearch.host` 已配置且 `sync_on_index` 为 true）
+  3. 同步写入 Neo4j 图（如果 `databases.neo4j` 配置存在且检索侧启用图扩展）
 
 ### 统一规范化与去重（新增）
 
@@ -43,7 +44,7 @@ app/rag/vectorization/
 - 批内去重：按稳定 ID 去重
 - 库内过滤：`get(ids=...)` 过滤已存在 ID 后再写入
 - upsert：已存在且内容/元数据变化则 update，否则 add
-- 索引器会输出统计日志：`raw / batch_dedup / existed / written / updated / meilisearch_synced`
+- 索引器会输出统计日志：`raw / batch_dedup / existed / written / updated / meilisearch_synced / neo4j_synced`
 
 ### Meilisearch 同步机制
 
@@ -75,6 +76,18 @@ app/rag/vectorization/
    - 日志中会显示 `meilisearch_synced` 字段，表示成功同步到 Meilisearch 的文档数量
 
 > 提示：若希望 where 生效，请确保需要过滤的键被加入 `metadata_whitelist`，并在入口/管线阶段保证这些键有值（即使为空串/0/False）。
+
+### Neo4j 同步机制（可选）
+
+- 作用：为后续图扩展检索提供结构化关系（文档-分块、相邻块）。
+- 启用条件：`databases.neo4j` 已配置（url/user/password）。检索侧需要在 `retrieval.neo4j.enabled` 打开开关。
+- 写入内容（`Neo4jIndexer`）：
+  - `Document` 节点：`doc_id`
+  - `Chunk` 节点：`id, doc_id, chunk_index, total_chunks, section, page_number`
+  - 关系：
+    - `(:Chunk)-[:PART_OF]->(:Document)`
+    - 相邻块 `(:Chunk)-[:NEXT]->(:Chunk)` 按 `chunk_index` 顺序
+- 错误隔离：图写入失败不会影响 Chroma/Meilisearch 主流程，只记录警告日志。
 
 ## 配置（app_config.json）
 

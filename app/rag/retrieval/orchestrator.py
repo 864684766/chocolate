@@ -13,7 +13,8 @@ from .vector_retriever import VectorRetriever
 from .meilisearch_retriever import MeilisearchRetriever
 from .hybrid import HybridSearcher
 from .reranker import CrossEncoderReranker
-from .schemas import RetrievalQuery, RetrievedItem
+from .schemas import RetrievalQuery, RetrievedItem, RetrievalResult
+from .graph_retriever import GraphRetriever
 from ...config import get_config_manager
 from ...llm_adapters.factory import LLMProviderFactory
 from ...infra.logging import get_logger
@@ -31,9 +32,12 @@ class RetrievalOrchestrator:
     """
 
     def __init__(self) -> None:
-        """初始化检索编排器。
+        """
+        初始化检索编排器，读取配置并初始化依赖检索器。
 
-        读取配置并初始化检索器。
+        用处：
+        - 装配向量检索、Meilisearch 检索、可选图扩展与重排。
+        - 读取检索、重排、图扩展的配置开关和参数。
         """
         self.cfg = get_config_manager()
         self.logger = get_logger(__name__)
@@ -43,6 +47,20 @@ class RetrievalOrchestrator:
         meili_cfg = (self.cfg.get_config("retrieval") or {}).get("meilisearch", {}) or {}
         meili_host = str(meili_cfg.get("host", "")).strip()
         self._meili_enabled = bool(meili_host)
+        
+        # 总是尝试初始化图检索（失败时降级处理）
+        graph_cfg = (self.cfg.get_config("retrieval") or {}).get("neo4j", {}) or {}
+        self._graph_hops = int(graph_cfg.get("max_hops", 1))
+        self._graph_limit = int(graph_cfg.get("max_neighbors", 10))
+        self._graph: Optional[GraphRetriever] = None
+        try:
+            gr = GraphRetriever()
+            if gr.is_enabled():
+                self._graph = gr
+            else:
+                self.logger.debug("Neo4j 未配置，图检索将跳过")
+        except Exception as e:
+            self.logger.warning(f"初始化图检索失败，将跳过图检索: {e}")
 
     def run(self, query: str, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -70,6 +88,9 @@ class RetrievalOrchestrator:
         applied_where = wb.build(query)
 
         items = self._retrieve(query, top_k, score_th, applied_where)
+        # 使用 Neo4j 扩展邻居块（如果启用）
+        if self._graph and self._graph.is_enabled():
+            items = self._expand_with_graph(items)
         items = self._rerank(query, items, top_n)
         preview = self._build_preview(items, max_preview)
 
@@ -96,18 +117,19 @@ class RetrievalOrchestrator:
         """
         执行检索（向量检索或混合检索）。
 
-        参数：
+        参数:
         - query (str): 查询文本。
         - top_k (int): 召回候选数量。
         - score_th (float): 最低得分阈值，低于阈值的结果被过滤。
         - where (Optional[Dict[str, Any]]): 元数据过滤条件。
 
-        返回：
+        返回:
         - List[RetrievedItem]: 召回的候选项列表。
 
-        说明：
+        说明:
         - 如果混合检索启用，并行执行向量检索和关键词检索，然后融合结果
         - 如果未启用或失败，降级为仅向量检索
+        - Neo4j 图扩展在后续步骤中执行（基于 RRF 结果）
         """
         q = RetrievalQuery(query=query, where=where, top_k=top_k, score_threshold=score_th)
         
@@ -154,6 +176,36 @@ class RetrievalOrchestrator:
             self.logger.warning(f"混合检索失败，降级为仅向量检索: {e}", exc_info=True)
             return vector_result.items
 
+    def _expand_with_graph(self, items: List[RetrievedItem]) -> List[RetrievedItem]:
+        """
+        使用图数据库扩展邻居块，增强上下文覆盖。
+
+        用处：
+        - 基于 RRF 融合后的结果，在 Neo4j 中查找相邻/相关的块
+        - 通过 NEXT 关系找到同一文档中的相邻块，提供更完整的上下文
+
+        Args:
+            items: RRF 融合后的检索结果列表。
+
+        Returns:
+            List[RetrievedItem]: 合并图扩展后的结果（保持去重）。
+
+        说明:
+        - 如果图检索未启用或失败，直接返回原始结果
+        - 扩展的邻居块会与原始结果合并去重
+        """
+        if not items or not self._graph:
+            return items
+        try:
+            return self._graph.expand_neighbors(
+                items,
+                max_hops=self._graph_hops,
+                limit=self._graph_limit,
+            )
+        except Exception as e:
+            self.logger.warning(f"图扩展失败，返回原始结果: {e}", exc_info=True)
+            return items
+
     def _rerank(self, query: str, items: List[RetrievedItem], top_n: int) -> List[RetrievedItem]:
         """
         对候选进行交叉编码器重排。
@@ -171,6 +223,7 @@ class RetrievalOrchestrator:
         model = str(self._cfg_rerank().get("model") or "") or None
         reranker = CrossEncoderReranker(model=model)
         return reranker.rerank(items, top_n=top_n, query=query)
+
 
     @staticmethod
     def _build_preview(items: List[RetrievedItem], max_items: int) -> str:

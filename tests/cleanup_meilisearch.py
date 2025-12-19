@@ -53,8 +53,7 @@ def _get_meilisearch_client():
         )
 
     cfg = get_config_manager()
-    meili_cfg = (cfg.get_config("retrieval") or {}).get("meilisearch", {}) or {}
-    
+    meili_cfg = cfg.get_meilisearch_database_config() or {}
     host = str(meili_cfg.get("host", "")).strip()
     if not host:
         raise RuntimeError("Meilisearch host 未配置")
@@ -324,7 +323,7 @@ def _get_index_name(args_index: Optional[str]) -> str:
         return args_index
     
     cfg = get_config_manager()
-    meili_cfg = (cfg.get_config("retrieval") or {}).get("meilisearch", {}) or {}
+    meili_cfg = cfg.get_meilisearch_database_config() or {}
     return str(meili_cfg.get("index", "documents"))
 
 

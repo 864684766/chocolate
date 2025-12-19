@@ -4,7 +4,12 @@ from __future__ import annotations
 Meilisearch 数据库助手：集中管理客户端与索引获取，统一配置读取。
 """
 
-from typing import Iterable, List, Optional
+from typing import Iterable, Optional
+
+try:
+    from meilisearch.errors import MeilisearchApiError
+except ImportError:  # pragma: no cover - 仅在未安装时兜底
+    MeilisearchApiError = Exception
 
 from app.config import get_config_manager
 from app.infra.logging import get_logger
@@ -59,8 +64,15 @@ class MeilisearchDBHelper:
         index = client.index(name)
         try:
             index.get_stats()
-        except Exception:
-            client.create_index(name, {"primaryKey": primary_key})
+        except MeilisearchApiError as exc:
+            # 仅在索引不存在时创建，其他异常向上抛出
+            if "index_not_found" in str(exc) or "index not found" in str(exc).lower():
+                client.create_index(name, {"primaryKey": primary_key})
+            else:
+                raise
+        except (ConnectionError, RuntimeError):
+            # 连接类错误上抛，方便调用方感知
+            raise
         if searchable:
             index.update_searchable_attributes(list(searchable))
         if filterable:

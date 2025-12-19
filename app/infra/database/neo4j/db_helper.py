@@ -5,6 +5,12 @@ Neo4j 数据库助手：集中管理驱动初始化与会话执行。
 """
 
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
+
+try:
+    from neo4j import Query  # 提供类型安全的查询封装
+except ImportError:
+    Query = str  # 兼容未安装时的类型占位
 
 from app.config import get_config_manager
 from app.infra.logging import get_logger
@@ -37,7 +43,8 @@ class Neo4jDBHelper:
             from neo4j import GraphDatabase
         except ImportError as exc:
             raise ImportError("neo4j 模块未安装，请运行: poetry add neo4j") from exc
-        self._driver = GraphDatabase.driver(self.url, auth=(self.user, self.password))
+        safe_url = self._normalize_url(self.url)
+        self._driver = GraphDatabase.driver(safe_url, auth=(self.user, self.password))
         return self._driver
 
     def close(self) -> None:
@@ -50,13 +57,35 @@ class Neo4jDBHelper:
         """执行只读查询并返回结果列表。"""
         driver = self.get_driver()
         with driver.session(default_access_mode="READ") as session:
-            result = session.run(query, params or {})
+            # 使用 Query 包装以满足类型要求（LiteralString | Query）
+            q_obj = Query(query) if Query is not str else query
+            result = session.run(q_obj, params or {})
             return [record.data() for record in result]
 
     def run_write(self, query: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """执行写入查询并返回结果列表。"""
         driver = self.get_driver()
         with driver.session(default_access_mode="WRITE") as session:
-            result = session.run(query, params or {})
+            q_obj = Query(query) if Query is not str else query
+            result = session.run(q_obj, params or {})
             return [record.data() for record in result]
+
+    def _normalize_url(self, url: str) -> str:
+        """
+        规范化 Neo4j 连接 URL，兼容 http/https 写法，统一转换为 bolt。
+
+        Args:
+            url: 原始配置的 URL。
+
+        Returns:
+            str: 可用于驱动的 bolt/neo4j URL。
+        """
+        if not url:
+            return url
+        parsed = urlparse(url)
+        if parsed.scheme in ("http", "https"):
+            host = parsed.hostname or ""
+            port = parsed.port or 7687
+            return f"bolt://{host}:{port}"
+        return url
 

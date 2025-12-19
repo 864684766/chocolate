@@ -577,3 +577,32 @@ where 过滤示例：
 
 - 角色集合遵循各模型的 `chat_template`（通用安全组合：system、user、assistant）。
 - 若模板中出现未定义角色（如 tool/function），请先验证对应模型的 `tokenizer_config.json` 中 `chat_template` 是否支持。
+
+## 图邻居扩展（可选，retrieval.neo4j）
+
+- 作用：在向量/关键词召回后，基于 Neo4j 中的 Chunk 关系（`PART_OF`、`NEXT`）扩展相邻块，提升上下文覆盖。
+- 配置：`config/app_config.json` 中的 `retrieval.neo4j` 段，示例：
+
+  ```json
+  "retrieval": {
+    "neo4j": {
+      "enabled": true,
+      "max_hops": 1,
+      "max_neighbors": 10
+    }
+  }
+  ```
+
+- 数据来源：入库阶段 `Neo4jIndexer` 写入节点与关系：
+
+  - `(:Document {doc_id})`
+  - `(:Chunk {id, doc_id, chunk_index, total_chunks, section, page_number})-[:PART_OF]->(:Document)`
+  - 相邻块 `(:Chunk)-[:NEXT]->(:Chunk)`（按 chunk_index 顺序）
+
+- 检索流程：`RetrievalOrchestrator` 在向量/混合召回后、重排前调用 `GraphRetriever`：
+
+  1. 根据召回的 chunk_id 查询图邻居（最大 hops/数量受配置限制）
+  2. 从 Chroma 读取邻居的正文与元数据
+  3. 合并去重后进入后续重排与生成
+
+- 默认关闭：`enabled` 为 false 时完全不触发图查询，保持原有行为。
