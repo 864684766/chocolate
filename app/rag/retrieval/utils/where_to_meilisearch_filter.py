@@ -2,12 +2,13 @@
 
 职责：
 - 将 ChromaDB 的 where 语法（如 {"field": {"$eq": "value"}}）转换为 Meilisearch 的 filter 语法
-- 支持基本操作符：$eq, $ne, $gt, $gte, $lt, $lte, $in, $contains
+- 支持基本操作符：$eq, $ne, $gt, $gte, $lt, $lte, $in
 - 支持逻辑组合：$and, $or
 
 说明：
 - Meilisearch filter 使用字符串表达式，如 "field = value"
-- 数组字段的 $contains 转换为 Meilisearch 的 IN 操作
+- $in 操作符转换为 Meilisearch 的 IN 操作，如 "field IN [value1, value2]"
+- 保留 $contains 的转换逻辑作为兼容性处理（向后兼容）
 """
 
 from typing import Any, Dict, List, Optional

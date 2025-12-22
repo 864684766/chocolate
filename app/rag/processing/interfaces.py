@@ -12,7 +12,8 @@ class RawSample:
 
 @dataclass
 class ProcessedChunk:
-    text: str
+    text: str  # 规范化后的文本（用于向量化和检索）
+    id: str    # 基于规范化文本的稳定 ID（hash）
     meta: Dict[str, Any]
 
 

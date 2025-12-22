@@ -16,14 +16,18 @@ def tags_contains_parser(field: str) -> Callable[[str, "ParserContext"], Optiona
     策略：
     1) 使用通用语言推断 infer_lang；
     2) 调用系统关键词抽取服务，从 query 中抽取 1~3 个关键词；
-    3) 生成 `$and` + `$contains` 条件；
+    3) 生成 `$in` 条件，检查字段值是否在关键词列表中；
     4) 无关键词时回退到通用键值解析（field:value）。
 
     Args:
         field: 字段名（如 "tags" 或 "keyphrases"）。
 
     Returns:
-        解析函数，返回 {"$and": [{field: {"$contains": kw}}, ...]} 或通用解析结果，均可能为 None。
+        解析函数，返回 {field: {"$in": [kw1, kw2, ...]}} 或通用解析结果，均可能为 None。
+        
+    说明:
+    - 使用 $in 操作符，兼容 ChromaDB、Meilisearch 和 Neo4j
+    - 对于数组字段，$in 表示字段值（或数组中的元素）在指定的列表中
     """
 
     def _parser(query: str, ctx: "ParserContext") -> Optional[Dict[str, Any]]:
@@ -44,7 +48,8 @@ def tags_contains_parser(field: str) -> Callable[[str, "ParserContext"], Optiona
             kws = extract_keyphrases(query, lang=lang, topk=3)
             kws = [k.strip() for k in (kws or []) if k and isinstance(k, str)]
             if kws:
-                return {"$and": [{field: {"$contains": k}} for k in kws]}
+                # 使用 $in 操作符，检查字段值是否在关键词列表中
+                return {field: {"$in": kws}}
         except (ImportError, AttributeError, TypeError, ValueError):
             # 关键词服务不可用或参数错误时静默处理
             pass

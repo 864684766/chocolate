@@ -13,7 +13,7 @@ from .vector_retriever import VectorRetriever
 from .meilisearch_retriever import MeilisearchRetriever
 from .hybrid import HybridSearcher
 from .reranker import CrossEncoderReranker
-from .schemas import RetrievalQuery, RetrievedItem, RetrievalResult
+from .schemas import RetrievalQuery, RetrievedItem
 from .graph_retriever import GraphRetriever
 from ...config import get_config_manager
 from ...llm_adapters.factory import LLMProviderFactory
@@ -44,7 +44,7 @@ class RetrievalOrchestrator:
         
         # 检查 Meilisearch 是否配置（通过 host 是否存在判断）
         # 如果 Meilisearch 已配置，则启用混合检索
-        meili_cfg = (self.cfg.get_config("retrieval") or {}).get("meilisearch", {}) or {}
+        meili_cfg = self.cfg.get_meilisearch_database_config()
         meili_host = str(meili_cfg.get("host", "")).strip()
         self._meili_enabled = bool(meili_host)
         

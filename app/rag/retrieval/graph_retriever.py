@@ -77,15 +77,23 @@ class GraphRetriever:
 
         Returns:
             List[str]: 去重后的邻居块 ID 列表。
+
+        说明:
+        - Neo4j 不允许在关系模式中使用参数化的跳数，需要直接拼接
+        - 已添加安全检查，确保 hops 是安全的整数（限制在 1-10 之间）
         """
-        query = """
+        # Neo4j 不允许在关系模式中使用参数化的跳数，需要直接拼接
+        # 确保 hops 是正整数，防止注入（限制在 1-10 之间）
+        hops = max(1, min(int(hops), 10))
+        
+        query = f"""
         MATCH (c:Chunk) WHERE c.id IN $ids
-        MATCH (c)-[:NEXT*1..$hops]-(n:Chunk)
+        MATCH (c)-[:NEXT*1..{hops}]-(n:Chunk)
         RETURN DISTINCT n.id AS id
         LIMIT $limit
         """
         try:
-            rows = self.db.run_read(query, {"ids": ids, "hops": hops, "limit": limit})
+            rows = self.db.run_read(query, {"ids": ids, "limit": limit})
             return [str(r.get("id")) for r in rows if r.get("id")]
         except Exception as exc:
             self.logger.warning(f"查询图邻居失败: {exc}")
@@ -109,9 +117,12 @@ class GraphRetriever:
                 ids=ids,
                 include=["documents", "metadatas"],
             )
-            docs = result.get("documents", [[]])[0] if isinstance(result.get("documents"), list) else result.get("documents", [])
-            metas = result.get("metadatas", [[]])[0] if isinstance(result.get("metadatas"), list) else result.get("metadatas", [])
-            res_ids = result.get("ids", [[]])[0] if isinstance(result.get("ids"), list) else result.get("ids", [])
+            # ChromaDB 的 get 方法返回扁平列表，不是嵌套列表
+            # query 方法返回嵌套列表（因为可能有多个查询），但 get 方法返回扁平列表
+            docs = result.get("documents", [])
+            metas = result.get("metadatas", [])
+            res_ids = result.get("ids", [])
+            
             items: List[RetrievedItem] = []
             for _id, doc, meta in zip(res_ids, docs, metas):
                 if not _id or not doc:

@@ -141,11 +141,26 @@ class ProcessingPipeline:
             chunk_text = self.text_cleaner.clean(chunk_text)
             if not chunk_text:
                 continue
+            
+            # 规范化文本用于生成稳定 ID（与向量化阶段保持一致）
+            from app.rag.vectorization.metadata_utils import normalize_text_for_vector
+            from hashlib import sha1
+            norm_text = normalize_text_for_vector(chunk_text)
+            if not norm_text:
+                continue
+            
+            # 生成稳定 ID（基于规范化文本的 hash）
+            chunk_id = sha1(norm_text.encode("utf-8")).hexdigest()[:16]
+            
             chunk_meta = self.metadata_manager.build_metadata(
                 chunk_result.get("meta", {}),
-                text=chunk_text
+                text=norm_text  # 使用规范化后的文本
             )
-            chunks.append(ProcessedChunk(text=chunk_text, meta=chunk_meta))
+            chunks.append(ProcessedChunk(
+                text=norm_text,  # 存储规范化后的文本
+                id=chunk_id,
+                meta=chunk_meta
+            ))
         return chunks
     
     def _clean_media_content(self, content: Any, media_type: str) -> Any:

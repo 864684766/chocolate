@@ -1,10 +1,10 @@
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple, Set
 from app.rag.processing.interfaces import ProcessedChunk
 from app.infra.database.chroma.db_helper import ChromaDBHelper
 from .config import VectorizationConfig
 from .embedder import Embedder
 from .metadata_utils import build_metadata_from_meta
-from .utils_writer import normalize_and_build_id, dedup_in_batch, slice_new_records, flatten_metadatas
+from .utils_writer import slice_new_records
 from .meilisearch_indexer import MeilisearchIndexer
 from .neo4j_indexer import Neo4jIndexer
 from app.infra.logging import get_logger
@@ -104,54 +104,32 @@ class VectorIndexer:
         return written_n + updated_n
 
     def _prepare_chunks(self, chunks: List[ProcessedChunk]) -> Optional[Dict]:
-        """准备索引数据：规范化、去重、对比库内记录。
+        """准备索引数据：去重、对比库内记录。
 
         Returns:
             dict: 包含 ids_new, texts_new, metadatas_new, ids_update, texts_update, metas_update,
-                  raw_n, after_batch_n, existed_n, uniq。如果无需写入则返回 None。
+                  raw_n, after_batch_n, existed_n。如果无需写入则返回 None。
+        
+        说明:
+        - ID 已在 processing 阶段生成（基于规范化文本的 hash）
+        - 这里只需要按 ID 去重，然后对比库内记录
         """
-        # 文本/元数据统一化 + 生成稳定ID
-        normalized = [normalize_and_build_id(c.text, c.meta) for c in chunks if isinstance(c.text, str)]
-        uniq = dedup_in_batch(normalized)
-
-        raw_n = len([c for c in chunks if isinstance(c.text, str)])
-        after_batch_n = len(uniq)
-        ids = list(uniq.keys())
-        texts = [uniq[i][0] for i in ids]
-        metadatas = flatten_metadatas(uniq, ids)
-
-        if not ids:
+        raw_n = len(chunks)
+        valid_chunks = self._filter_valid_chunks(chunks)
+        unique_chunks = self._deduplicate_by_id(valid_chunks)
+        after_batch_n = len(unique_chunks)
+        
+        if not unique_chunks:
             return None
-
-        # 与库对比，过滤已存在的ID
-        existed = self.db.get(
-            collection_name=self.config.collection_name,
-            ids=ids,
-            include=[],
-        )
-        exist_ids = set(existed.get("ids", []))
+        
+        ids, texts, metadatas = self._extract_chunk_data(unique_chunks)
+        exist_ids = self._check_existing_ids(ids)
         ids_new, texts_new, metadatas_new = slice_new_records(ids, exist_ids, texts, metadatas)
         existed_n = len(ids) - len(ids_new)
-
-        # 构造更新集：对已存在ID，若内容或元数据变化则更新
-        ids_update: List[str] = []
-        texts_update: List[str] = []
-        metas_update: List[dict] = []
-        if exist_ids:
-            existed_full = self.db.get(
-                collection_name=self.config.collection_name,
-                ids=list(exist_ids),
-                include=["documents", "metadatas"],
-            )
-            old_docs_map = {i: d for i, d in zip(existed_full.get("ids", []), existed_full.get("documents", []))}
-            old_metas_map = {i: m for i, m in zip(existed_full.get("ids", []), existed_full.get("metadatas", []))}
-            for _id in exist_ids:
-                new_text = uniq[_id][0]
-                new_meta_flat = build_metadata_from_meta(uniq[_id][1])
-                if old_docs_map.get(_id) != new_text or old_metas_map.get(_id) != new_meta_flat:
-                    ids_update.append(_id)
-                    texts_update.append(new_text)
-                    metas_update.append(new_meta_flat)
+        
+        ids_update, texts_update, metas_update = self._build_update_records(
+            unique_chunks, exist_ids
+        )
 
         if not ids_new and not ids_update:
             self.logger.info(
@@ -170,8 +148,119 @@ class VectorIndexer:
             "raw_n": raw_n,
             "after_batch_n": after_batch_n,
             "existed_n": existed_n,
-            "uniq": uniq,
         }
+
+    @staticmethod
+    def _filter_valid_chunks(chunks: List[ProcessedChunk]) -> List[ProcessedChunk]:
+        """过滤有效的 chunk（必须有 id 和 text）。
+
+        Args:
+            chunks: 原始 chunk 列表
+
+        Returns:
+            List[ProcessedChunk]: 有效的 chunk 列表
+        """
+        return [c for c in chunks if c.id and c.text]
+
+    @staticmethod
+    def _deduplicate_by_id(chunks: List[ProcessedChunk]) -> List[ProcessedChunk]:
+        """按 ID 去重（保留第一个）。
+
+        Args:
+            chunks: chunk 列表
+
+        Returns:
+            List[ProcessedChunk]: 去重后的 chunk 列表
+        """
+        seen_ids: Dict[str, int] = {}
+        unique_chunks: List[ProcessedChunk] = []
+        for chunk in chunks:
+            if chunk.id not in seen_ids:
+                seen_ids[chunk.id] = len(unique_chunks)
+                unique_chunks.append(chunk)
+        return unique_chunks
+
+    @staticmethod
+    def _extract_chunk_data(chunks: List[ProcessedChunk]) -> Tuple[List[str], List[str], List[Dict]]:
+        """提取 chunk 的 ID、文本和元数据。
+
+        Args:
+            chunks: chunk 列表
+
+        Returns:
+            Tuple[List[str], List[str], List[Dict]]: (ids, texts, metadatas)
+        """
+        ids = [c.id for c in chunks]
+        texts = [c.text for c in chunks]
+        metadatas = [build_metadata_from_meta(c.meta) for c in chunks]
+        return ids, texts, metadatas
+
+    def _check_existing_ids(self, ids: List[str]) -> Set[str]:
+        """检查哪些 ID 在数据库中已存在。
+
+        Args:
+            ids: 要检查的 ID 列表
+
+        Returns:
+            Set[str]: 已存在的 ID 集合
+        """
+        existed = self.db.get(
+            collection_name=self.config.collection_name,
+            ids=ids,
+            include=[],
+        )
+        return set(existed.get("ids", []))
+
+    def _build_update_records(
+        self, chunks: List[ProcessedChunk], exist_ids: Set[str]
+    ) -> Tuple[List[str], List[str], List[Dict]]:
+        """构造更新记录：对已存在ID，若内容或元数据变化则更新。
+
+        Args:
+            chunks: chunk 列表
+            exist_ids: 已存在的 ID 集合
+
+        Returns:
+            Tuple[List[str], List[str], List[Dict]]: (ids_update, texts_update, metas_update)
+        """
+        if not exist_ids:
+            return [], [], []
+        
+        existed_full = self.db.get(
+            collection_name=self.config.collection_name,
+            ids=list(exist_ids),
+            include=["documents", "metadatas"],
+        )
+        old_docs_map = {
+            i: d for i, d in zip(
+                existed_full.get("ids", []),
+                existed_full.get("documents", [])
+            )
+        }
+        old_metas_map = {
+            i: m for i, m in zip(
+                existed_full.get("ids", []),
+                existed_full.get("metadatas", [])
+            )
+        }
+        
+        id_to_chunk = {c.id: c for c in chunks}
+        ids_update: List[str] = []
+        texts_update: List[str] = []
+        metas_update: List[dict] = []
+        
+        for _id in exist_ids:
+            if _id not in id_to_chunk:
+                continue
+            chunk = id_to_chunk[_id]
+            new_text = chunk.text
+            new_meta_flat = build_metadata_from_meta(chunk.meta)
+            if old_docs_map.get(_id) != new_text or old_metas_map.get(_id) != new_meta_flat:
+                ids_update.append(_id)
+                texts_update.append(new_text)
+                metas_update.append(new_meta_flat)
+        
+        return ids_update, texts_update, metas_update
 
     def _index_to_chromadb(
         self,

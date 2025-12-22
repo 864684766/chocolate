@@ -14,8 +14,6 @@
 from __future__ import annotations
 
 from typing import List, Dict, Any, Optional, Set
-from hashlib import sha1
-import re
 from app.config import get_config_manager
 from app.infra.logging import get_logger
 from app.infra.database.meilisearch.db_helper import MeilisearchDBHelper
@@ -193,38 +191,6 @@ class MeilisearchIndexer:
             self.logger.error(f"同步到 Meilisearch 失败: {e}", exc_info=True)
             return 0
 
-    def _sanitize_doc_id(self, doc_id: str) -> str:
-        """清理文档 ID，使其符合 Meilisearch 要求。
-
-        Meilisearch 要求文档 ID：
-        - 只能是整数或字符串
-        - 只能包含字母数字字符（a-z A-Z 0-9）、连字符（-）和下划线（_）
-        - 不能超过 511 字节
-
-        Args:
-            doc_id: 原始文档 ID（可能包含冒号等不允许的字符）
-
-        Returns:
-            str: 清理后的文档 ID
-        """
-        if not doc_id:
-            return doc_id
-
-        # 将冒号替换为下划线（保持可读性）
-        sanitized = doc_id.replace(":", "_")
-        
-        # 移除其他不允许的字符，只保留字母数字、连字符和下划线
-        sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", sanitized)
-        
-        # 确保不超过 511 字节
-        if len(sanitized.encode("utf-8")) > 511:
-            # 如果超过，截断并添加哈希后缀以确保唯一性
-            max_len = 400  # 预留空间给哈希
-            hash_suffix = sha1(doc_id.encode("utf-8")).hexdigest()[:16]
-            sanitized = sanitized[:max_len] + "_" + hash_suffix
-        
-        return sanitized
-
     def _convert_to_meilisearch_doc(
         self, doc_id: str, text: str, metadata: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
@@ -241,16 +207,14 @@ class MeilisearchIndexer:
         Notes:
             - Meilisearch 格式：展开 metadata 到顶层
             - 数组字段：ChromaDB 存储为逗号分隔字符串，需要转换回数组
-            - 文档 ID 会被清理以符合 Meilisearch 要求（冒号等字符会被替换）
+            - 文档 ID 已经是纯 hash 格式（16 位十六进制），符合 Meilisearch 要求
         """
         if not doc_id or not text:
             return None
 
-        # 清理文档 ID 以符合 Meilisearch 要求
-        sanitized_id = self._sanitize_doc_id(doc_id)
-
+        # ID 已经是纯 hash 格式（16 位十六进制），完全符合 Meilisearch 要求
         doc: Dict[str, Any] = {
-            "id": sanitized_id,
+            "id": doc_id,
             "text": text,
         }
 
